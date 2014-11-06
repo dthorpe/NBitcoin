@@ -1,6 +1,7 @@
 ﻿using NBitcoin.Crypto;
-using Org.BouncyCastle.Math;
-using Org.BouncyCastle.Math.EC;
+using NBitcoin.DataEncoders;
+using NBitcoin.BouncyCastle.Math;
+using NBitcoin.BouncyCastle.Math.EC;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -117,12 +118,19 @@ namespace NBitcoin
 			var pointb = BitcoinEncryptedSecret.DecryptKey(EncryptedPointB.Skip(1).ToArray(), derived);
 			pointb = new byte[] { pointbprefix }.Concat(pointb).ToArray();
 
+			var param1 = Encoders.Hex.EncodeData(EncryptedPointB.Skip(1).ToArray());
+			var param2 = Encoders.Hex.EncodeData(derived);
+
 			//4.ECMultiply pointb by passfactor. Use the resulting EC point as a public key
 			var curve = ECKey.CreateCurve();
 			ECPoint pointbec = null;
 			try
 			{
 				pointbec = curve.Curve.DecodePoint(pointb);
+			}
+			catch(ArgumentException)
+			{
+				return false;
 			}
 			catch(ArithmeticException)
 			{

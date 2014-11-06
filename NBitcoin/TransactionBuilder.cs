@@ -222,21 +222,14 @@ namespace NBitcoin
 
 			private TxOut EnsureMarkerInserted()
 			{
-				var txout = Transaction.Outputs.FirstOrDefault(o => Script.IsNullOrEmpty(o.ScriptPubKey));
-				if(txout == null)
+				int position;
+				if(ColorMarker.Get(Transaction, out position) != null)
+					return Transaction.Outputs[position];
+				var txout = Transaction.AddOutput(new TxOut()
 				{
-					int i = 0;
-					var cm = ColorMarker.Get(Transaction, out i);
-					if (cm == null)
-					{
-						txout = Transaction.AddOutput(new TxOut());
-						txout.Value = Money.Zero;
-					}
-					else
-					{
-						txout = Transaction.Outputs[i];
-					}
-				}
+					ScriptPubKey = new ColorMarker().GetScript()
+				});
+				txout.Value = Money.Zero;
 				return txout;
 			}
 
@@ -372,14 +365,14 @@ namespace NBitcoin
 		}
 
 		public TransactionBuilder AddCoins(params ICoin[] coins)
-        {
-            return AddCoins((IEnumerable<ICoin>)coins);
-        }
+		{
+			return AddCoins((IEnumerable<ICoin>)coins);
+		}
 
-        public TransactionBuilder AddCoins(IEnumerable<ICoin> coins)
-        {
+		public TransactionBuilder AddCoins(IEnumerable<ICoin> coins)
+		{
 			foreach(var coin in coins)
-			{ 
+			{
 				CurrentGroup.Coins.Add(coin);
 			}
 			return this;
@@ -765,9 +758,7 @@ namespace NBitcoin
 				input.ScriptSig = CreateScriptSig(ctx, input, coin, n, scriptCoin.Redeem);
 				if(original != input.ScriptSig)
 				{
-					var ops = input.ScriptSig.ToOps().ToList();
-					ops.Add(Op.GetPushOp(scriptCoin.Redeem.ToRawScript(true)));
-					input.ScriptSig = new Script(ops.ToArray());
+					input.ScriptSig = input.ScriptSig + Op.GetPushOp(scriptCoin.Redeem.ToRawScript(true));
 				}
 			}
 			else
@@ -776,7 +767,6 @@ namespace NBitcoin
 			}
 
 		}
-
 
 		private Script CreateScriptSig(TransactionSigningContext ctx, TxIn input, ICoin coin, int n, Script scriptPubKey)
 		{
