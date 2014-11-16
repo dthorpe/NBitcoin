@@ -46,11 +46,27 @@ This is the simple way and most complete way to see the internal of bitcoin with
 Making NBitcoin Portable is possible and easy, but I can't develop it immediately for reasons expressed ([here](https://github.com/NicolasDorier/NBitcoin/issues/8))  
 
 
-Info :
-github : https://github.com/NicolasDorier/NBitcoin
-bitcoin address : 15sYbVpRh6dyWycZMwPdxJWD4xbfxReeHe
+## Useful doc :
+
+NBitcoin Github : https://github.com/NicolasDorier/NBitcoin
+
+NBitcoin Nuget : https://www.nuget.org/packages/NBitcoin/
+
+Intro : http://www.codeproject.com/Articles/768412/NBitcoin-The-most-complete-Bitcoin-port-Part-Crypt
+
+Stealth Payment, and BIP38 : http://www.codeproject.com/Articles/775226/NBitcoin-Cryptography-Part
+
+How to build transaction : http://www.codeproject.com/Articles/835098/NBitcoin-Build-Them-All
+
+Using the NBitcoin Indexer : http://www.codeproject.com/Articles/819567/NBitcoin-Indexer-A-scalable-and-fault-tolerant-blo
+
+How to Scan the blockchain : http://www.codeproject.com/Articles/784519/NBitcoin-How-to-scan-the-Blockchain (You can dismissthe ScanState for that, now I concentrate on the indexer)
+
+Bitcoin address : 15sYbVpRh6dyWycZMwPdxJWD4xbfxReeHe
+
 if you want to contact me : http://nicolas-dorier.com/Contact will do the rest by email :)
 
-Useful link :
+
+##Useful link :
 Visual studio express : http://www.visualstudio.com/en-us/products/visual-studio-express-vs.aspx
 XUnit runner (only if using vs express) : http://xunit.codeplex.com/releases
