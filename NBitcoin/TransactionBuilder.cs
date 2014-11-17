@@ -749,12 +749,11 @@ namespace NBitcoin
 			return SignTransaction(transaction, SigHash.All);
 		}
 
-		public void SignTransactionInPlace(Transaction transaction)
+		public Transaction SignTransactionInPlace(Transaction transaction)
 		{
-			SignTransactionInPlace(transaction, SigHash.All);
+			return SignTransactionInPlace(transaction, SigHash.All);
 		}
-
-		public void SignTransactionInPlace(Transaction transaction, SigHash sigHash)
+		public Transaction SignTransactionInPlace(Transaction transaction, SigHash sigHash)
 		{
 			TransactionSigningContext ctx = new TransactionSigningContext(this, transaction);
 			ctx.SigHash = sigHash;
@@ -767,6 +766,7 @@ namespace NBitcoin
 					Sign(ctx, txIn, coin, i);
 				}
 			}
+			return transaction; 
 		}
 
 		public bool Verify(Transaction tx, Money expectFees = null)
