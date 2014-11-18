@@ -380,6 +380,8 @@ namespace NBitcoin
 			set;
 		}
 
+		public Func<OutPoint, ICoin> CoinFinder { get; set; }
+
 		LockTime? _LockTime;
 		public TransactionBuilder SetLockTime(LockTime lockTime)
 		{
@@ -802,7 +804,12 @@ namespace NBitcoin
 
 		private ICoin FindCoin(OutPoint outPoint)
 		{
-			return _BuilderGroups.SelectMany(c => c.Coins).FirstOrDefault(c => c.Outpoint == outPoint);
+			var result = _BuilderGroups.SelectMany(c => c.Coins).FirstOrDefault(c => c.Outpoint == outPoint);
+
+			if (result == null && CoinFinder != null)
+				result = CoinFinder(outPoint);
+
+			return result;
 		}
 
 		private void Sign(TransactionSigningContext ctx, TxIn input, ICoin coin, int n)
