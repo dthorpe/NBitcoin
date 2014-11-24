@@ -43,7 +43,7 @@ namespace NBitcoin
 			List<ICoin> result = new List<ICoin>();
 			Money total = Money.Zero;
 
-			if (target == Money.Zero)
+			if(target == Money.Zero)
 				return result;
 
 			var orderedCoins = coins.OrderBy(s => s.Amount).ToArray();
@@ -380,7 +380,11 @@ namespace NBitcoin
 			set;
 		}
 
-		public Func<OutPoint, ICoin> CoinFinder { get; set; }
+		public Func<OutPoint, ICoin> CoinFinder
+		{
+			get;
+			set;
+		}
 
 		LockTime? _LockTime;
 		public TransactionBuilder SetLockTime(LockTime lockTime)
@@ -766,13 +770,47 @@ namespace NBitcoin
 			for(int i = 0 ; i < transaction.Inputs.Count ; i++)
 			{
 				var txIn = transaction.Inputs[i];
-				var coin = FindCoin(txIn.PrevOut);
+				var coin = FindSignableCoin(txIn);
 				if(coin != null)
 				{
 					Sign(ctx, txIn, coin, i);
 				}
 			}
-			return transaction; 
+			return transaction;
+		}
+
+		public ICoin FindSignableCoin(TxIn txIn)
+		{
+			var coin = FindCoin(txIn.PrevOut);
+			if(coin == null)
+				return coin;
+			if(coin is IColoredCoin)
+				coin = ((IColoredCoin)coin).Bearer;
+
+			if(PayToScriptHashTemplate.Instance.CheckScriptPubKey(coin.ScriptPubKey))
+			{
+				var scriptCoin = coin as IScriptCoin;
+				if(scriptCoin == null)
+				{
+					var expectedId = PayToScriptHashTemplate.Instance.ExtractScriptPubKeyParameters(coin.ScriptPubKey);
+					//Try to extract redeem from this transaction
+					var p2shParams = PayToScriptHashTemplate.Instance.ExtractScriptSigParameters(txIn.ScriptSig);
+					if(p2shParams == null || p2shParams.RedeemScript.ID != expectedId)
+					{
+						var redeem = _ScriptIdToRedeem.TryGet(expectedId);
+						if(redeem == null)
+							return null;
+						//throw new InvalidOperationException("A coin with a P2SH scriptPubKey was detected, however this coin is not a ScriptCoin, and no information about the redeem script was found in the input, and from the KnownRedeems");
+						else
+							return new ScriptCoin(coin.Outpoint, ((Coin)coin).TxOut, redeem);
+					}
+					else
+					{
+						return new ScriptCoin(coin.Outpoint, ((Coin)coin).TxOut, p2shParams.RedeemScript);
+					}
+				}
+			}
+			return coin;
 		}
 
 		public bool Verify(Transaction tx, Money expectFees = null)
@@ -806,7 +844,7 @@ namespace NBitcoin
 		{
 			var result = _BuilderGroups.SelectMany(c => c.Coins).FirstOrDefault(c => c.Outpoint == outPoint);
 
-			if (result == null && CoinFinder != null)
+			if(result == null && CoinFinder != null)
 				result = CoinFinder(outPoint);
 
 			return result;
@@ -814,8 +852,6 @@ namespace NBitcoin
 
 		private void Sign(TransactionSigningContext ctx, TxIn input, ICoin coin, int n)
 		{
-			if(coin is IColoredCoin)
-				coin = ((IColoredCoin)coin).Bearer;
 
 			if(coin is StealthCoin)
 			{
@@ -827,22 +863,9 @@ namespace NBitcoin
 				ctx.AdditionalKeys.AddRange(stealthCoin.Uncover(spendKeys, scanKey));
 			}
 
-			if (PayToScriptHashTemplate.Instance.CheckScriptPubKey(coin.ScriptPubKey))
+			if(PayToScriptHashTemplate.Instance.CheckScriptPubKey(coin.ScriptPubKey))
 			{
-				var scriptCoin = coin as IScriptCoin;
-				if(scriptCoin == null)
-				{
-					var expectedId = PayToScriptHashTemplate.Instance.ExtractScriptPubKeyParameters(coin.ScriptPubKey);
-					//Try to extract redeem from this transaction
-					var p2shParams = PayToScriptHashTemplate.Instance.ExtractScriptSigParameters(input.ScriptSig);
-					if(p2shParams == null || p2shParams.RedeemScript.ID != expectedId)
-						throw new InvalidOperationException("A coin with a P2SH scriptPubKey was detected, however this coin is not a ScriptCoin, and no information about the redeem script was found in the input");
-					else
-					{
-						scriptCoin = new ScriptCoin(coin.Outpoint, ((Coin)coin).TxOut, p2shParams.RedeemScript);
-					}
-				}
-
+				var scriptCoin = (IScriptCoin)coin;
 				var original = input.ScriptSig;
 				input.ScriptSig = CreateScriptSig(ctx, input, coin, n, scriptCoin.Redeem);
 				if(original != input.ScriptSig)
@@ -894,7 +917,7 @@ namespace NBitcoin
 					.Select(p => FindKey(ctx, p))
 					.ToArray();
 
-				int sigCount = signatures.Where(s => s != TransactionSignature.Empty).Count();
+				int sigCount = signatures.Where(s => s != TransactionSignature.Empty && s != null).Count();
 				for(int i = 0 ; i < keys.Length ; i++)
 				{
 					if(sigCount == multiSigParams.SignatureCount)
@@ -902,7 +925,7 @@ namespace NBitcoin
 
 					if(i >= signatures.Count)
 					{
-						signatures.Add(TransactionSignature.Empty);
+						signatures.Add(null);
 					}
 					if(keys[i] != null)
 					{
@@ -915,7 +938,7 @@ namespace NBitcoin
 
 				if(sigCount == multiSigParams.SignatureCount)
 				{
-					signatures = signatures.Where(s => s != TransactionSignature.Empty).ToList();
+					signatures = signatures.Where(s => s != TransactionSignature.Empty && s != null).ToList();
 				}
 
 				return PayToMultiSigTemplate.Instance.GenerateScriptSig(
@@ -1019,6 +1042,78 @@ namespace NBitcoin
 				return toComplete;
 			});
 			return this;
+		}
+
+		public TransactionBuilder AddCoins(Transaction transaction)
+		{
+			var txId = transaction.GetHash();
+			AddCoins(transaction.Outputs.Select((o, i) => new Coin(txId, (uint)i, o.Value, o.ScriptPubKey)).ToArray());
+			return this;
+		}
+
+		Dictionary<ScriptId, Script> _ScriptIdToRedeem = new Dictionary<ScriptId, Script>();
+		public TransactionBuilder AddKnownRedeems(params Script[] knownRedeems)
+		{
+			foreach(var redeem in knownRedeems)
+			{
+				_ScriptIdToRedeem.AddOrReplace(redeem.ID, redeem);
+			}
+			return this;
+		}
+
+		public Transaction CombineSignatures(params Transaction[] transactions)
+		{
+			if(transactions.Length == 1)
+				return transactions[0];
+			if(transactions.Length == 0)
+				return null;
+
+			Transaction tx = transactions[0].Clone();
+			for(int i = 1 ; i < transactions.Length ; i++)
+			{
+				var signed = transactions[i];
+				tx = CombineSignaturesCore(tx, signed);
+			}
+			return tx;
+		}
+
+		private Transaction CombineSignaturesCore(Transaction signed1, Transaction signed2)
+		{
+			if(signed1 == null)
+				return signed2;
+			if(signed2 == null)
+				return signed1;
+			var tx = signed1.Clone();
+			for(int i = 0 ; i < tx.Inputs.Count ; i++)
+			{
+				if(i >= signed2.Inputs.Count)
+					break;
+
+				var txIn = tx.Inputs[i];
+
+				var coin = FindCoin(txIn.PrevOut);
+				var scriptPubKey = coin == null ? DeduceScriptPubKey(txIn.ScriptSig) : coin.ScriptPubKey;
+				if(scriptPubKey != null)
+				{
+					tx.Inputs[i].ScriptSig = Script.CombineSignatures(
+											scriptPubKey,
+											tx,
+											 i,
+											 signed1.Inputs[i].ScriptSig,
+											 signed2.Inputs[i].ScriptSig);
+				}
+			}
+			return tx;
+		}
+
+		private Script DeduceScriptPubKey(Script scriptSig)
+		{
+			var p2sh = PayToScriptHashTemplate.Instance.ExtractScriptSigParameters(scriptSig);
+			if(p2sh != null)
+			{
+				return p2sh.RedeemScript.ID.CreateScriptPubKey();
+			}
+			return null;
 		}
 	}
 }
