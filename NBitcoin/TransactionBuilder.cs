@@ -904,7 +904,7 @@ namespace NBitcoin
 				{
 					var ops = originalScriptSig.ToOps().ToList();
 					ops.RemoveAt(ops.Count - 1);
-					alreadySigned = PayToMultiSigTemplate.Instance.ExtractScriptSigParameters(new Script(ops.ToArray()));
+					alreadySigned = PayToMultiSigTemplate.Instance.ExtractScriptSigParameters(new Script(ops));
 				}
 				List<TransactionSignature> signatures = new List<TransactionSignature>();
 				if(alreadySigned != null)
@@ -936,13 +936,13 @@ namespace NBitcoin
 					}
 				}
 
+				IEnumerable<TransactionSignature> sigs = signatures;
 				if(sigCount == multiSigParams.SignatureCount)
 				{
-					signatures = signatures.Where(s => s != TransactionSignature.Empty && s != null).ToList();
+					sigs = sigs.Where(s => s != TransactionSignature.Empty && s != null);
 				}
 
-				return PayToMultiSigTemplate.Instance.GenerateScriptSig(
-					signatures.ToArray());
+				return PayToMultiSigTemplate.Instance.GenerateScriptSig(sigs);
 			}
 
 			var pubKeyParams = PayToPubkeyTemplate.Instance.ExtractScriptPubKeyParameters(scriptPubKey);
