@@ -110,6 +110,10 @@ namespace NBitcoin
 
 	public class ColoredCoin : IColoredCoin
 	{
+		public ColoredCoin()
+		{
+
+		}
 		public ColoredCoin(Asset asset, Coin bearer)
 		{
 			Asset = asset;
@@ -199,6 +203,11 @@ namespace NBitcoin
 		public Coin()
 		{
 
+		}
+		public Coin(Spendable spendable)
+		{
+			Outpoint = spendable.OutPoint;
+			TxOut = spendable.TxOut;
 		}
 		public Coin(OutPoint fromOutpoint, TxOut fromTxOut)
 		{
