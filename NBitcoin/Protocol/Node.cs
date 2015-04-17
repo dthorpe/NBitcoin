@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if !NOSOCKET
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -65,7 +66,12 @@ namespace NBitcoin.Protocol
 					return _Cancel;
 				}
 			}
-			public TraceCorrelation TraceCorrelation
+#if NOTRACESOURCE
+			internal
+#else
+			public
+#endif
+ TraceCorrelation TraceCorrelation
 			{
 				get
 				{
@@ -263,6 +269,7 @@ namespace NBitcoin.Protocol
 				Time = DateTimeOffset.UtcNow,
 				Endpoint = endpoint
 			});
+
 			VersionPayload version = new VersionPayload()
 			{
 				Nonce = 12345,
@@ -270,7 +277,7 @@ namespace NBitcoin.Protocol
 				Version = myVersion,
 				StartHeight = 0,
 				Timestamp = DateTimeOffset.UtcNow,
-				AddressReciever = peer.NetworkAddress.Endpoint,
+				AddressReceiver = peer.NetworkAddress.Endpoint,
 				AddressFrom = new IPEndPoint(IPAddress.Parse("0.0.0.0").MapToIPv6(), network.DefaultPort),
 				Relay = isRelay
 			};
@@ -285,7 +292,10 @@ namespace NBitcoin.Protocol
 			_Peer = peer;
 			LastSeen = peer.NetworkAddress.Time;
 
-			var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+			var socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp);
+#if !NOIPDUALMODE
+			socket.DualMode = true;
+#endif
 			_Connection = new NodeConnection(this, socket);
 			using(TraceCorrelation.Open())
 			{
@@ -359,7 +369,12 @@ namespace NBitcoin.Protocol
 
 		TraceCorrelation _TraceCorrelation = null;
 		[DebuggerBrowsable(DebuggerBrowsableState.Never)]
-		public TraceCorrelation TraceCorrelation
+#if NOTRACESOURCE
+		internal
+#else
+		public
+#endif
+ TraceCorrelation TraceCorrelation
 		{
 			get
 			{
@@ -408,16 +423,16 @@ namespace NBitcoin.Protocol
 			}
 		}
 
-		public TPayload RecieveMessage<TPayload>(TimeSpan timeout) where TPayload : Payload
+		public TPayload ReceiveMessage<TPayload>(TimeSpan timeout) where TPayload : Payload
 		{
 			var source = new CancellationTokenSource();
 			source.CancelAfter(timeout);
-			return RecieveMessage<TPayload>(source.Token);
+			return ReceiveMessage<TPayload>(source.Token);
 		}
 
 
 
-		public TPayload RecieveMessage<TPayload>(CancellationToken cancellationToken = default(CancellationToken)) where TPayload : Payload
+		public TPayload ReceiveMessage<TPayload>(CancellationToken cancellationToken = default(CancellationToken)) where TPayload : Payload
 		{
 			using(var listener = new NodeListener(this))
 			{
@@ -462,9 +477,9 @@ namespace NBitcoin.Protocol
 					var version = (VersionPayload)payload;
 					_PeerVersion = version;
 					Version = version.Version;
-					if(!version.AddressReciever.Address.Equals(MyVersion.AddressFrom.Address))
+					if(!version.AddressReceiver.Address.Equals(MyVersion.AddressFrom.Address))
 					{
-						NodeServerTrace.Warning("Different external address detected by the node " + version.AddressReciever.Address + " instead of " + MyVersion.AddressFrom.Address);
+						NodeServerTrace.Warning("Different external address detected by the node " + version.AddressReceiver.Address + " instead of " + MyVersion.AddressFrom.Address);
 					}
 					if(version.Version < ProtocolVersion.MIN_PEER_PROTO_VERSION)
 					{
@@ -491,7 +506,7 @@ namespace NBitcoin.Protocol
 				{
 					NodeServerTrace.Information("Responding to handshake");
 					SendMessage(MyVersion);
-					listener.RecieveMessage().AssertPayload<VerAckPayload>();
+					listener.ReceiveMessage().AssertPayload<VerAckPayload>();
 					SendMessage(new VerAckPayload());
 					_State = NodeState.HandShaked;
 				}
@@ -533,10 +548,10 @@ namespace NBitcoin.Protocol
 			}
 		}
 
-		public Chain GetChain(uint256 hashStop = null, CancellationToken cancellationToken = default(CancellationToken))
+		public PersistantChain GetChain(uint256 hashStop = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			var ms = new MemoryStream();
-			Chain chain = new Chain(Network, new StreamObjectStream<ChainChange>(ms));
+			PersistantChain chain = new PersistantChain(Network, new StreamObjectStream<ChainChange>(ms));
 			SynchronizeChain(chain, hashStop, cancellationToken);
 			return chain;
 		}
@@ -548,34 +563,37 @@ namespace NBitcoin.Protocol
 			using(TraceCorrelation.Open())
 			{
 				NodeServerTrace.Information("Building chain");
-				while(true)
+				using(var listener = this.CreateListener().OfType<HeadersPayload>())
 				{
-					SendMessage(new GetHeadersPayload()
+					while(true)
 					{
-						BlockLocators = currentTip.GetLocator(),
-						HashStop = hashStop
-					});
-					var headers = this.RecieveMessage<HeadersPayload>(cancellationToken);
-					if(headers.Headers.Count == 0)
-						break;
-					foreach(var header in headers.Headers)
-					{
-						var prev = currentTip.FindAncestorOrSelf(header.HashPrevBlock);
-						if(prev == null)
+						SendMessage(new GetHeadersPayload()
 						{
-							NodeServerTrace.Error("Block Header received out of order " + header.GetHash(), null);
-							throw new InvalidOperationException("Block Header received out of order");
+							BlockLocators = currentTip.GetLocator(),
+							HashStop = hashStop
+						});
+						var headers = listener.ReceivePayload<HeadersPayload>(cancellationToken);
+						if(headers.Headers.Count == 0)
+							break;
+						foreach(var header in headers.Headers)
+						{
+							var prev = currentTip.FindAncestorOrSelf(header.HashPrevBlock);
+							if(prev == null)
+							{
+								NodeServerTrace.Error("Block Header received out of order " + header.GetHash(), null);
+								throw new InvalidOperationException("Block Header received out of order");
+							}
+							currentTip = new ChainedBlock(header, header.GetHash(), prev);
+							yield return currentTip;
 						}
-						currentTip = new ChainedBlock(header, header.GetHash(), prev);
-						yield return currentTip;
+						if(currentTip.HashBlock == hashStop)
+							break;
 					}
-					if(currentTip.HashBlock == hashStop)
-						break;
 				}
 			}
 		}
 
-		public IEnumerable<ChainedBlock> SynchronizeChain(Chain chain, uint256 hashStop = null, CancellationToken cancellationToken = default(CancellationToken))
+		public IEnumerable<ChainedBlock> SynchronizeChain(ChainBase chain, uint256 hashStop = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			List<ChainedBlock> headers = new List<ChainedBlock>();
 			foreach(var header in GetHeadersFromFork(chain.Tip, hashStop, cancellationToken))
@@ -620,7 +638,7 @@ namespace NBitcoin.Protocol
 				int simultaneous = 70;
 				PerformanceSnapshot lastSpeed = null;
 				using(var listener = CreateListener()
-									.Where(inc => inc.Message.Payload is InvPayload || inc.Message.Payload is BlockPayload))
+									.OfType<BlockPayload>())
 				{
 					foreach(var invs in neededBlocks
 										.Select(b => new InventoryVector()
@@ -756,3 +774,4 @@ namespace NBitcoin.Protocol
 		}
 	}
 }
+#endif

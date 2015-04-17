@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace NBitcoin
 {
@@ -13,16 +11,25 @@ namespace NBitcoin
 			_Indexes =
 				path
 				.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
-				.Select(c => uint.Parse(c))
+				.Select(Parse)
 				.ToArray();
 
+		}
+
+		private static uint Parse(string i)
+		{
+			bool hardened = i.EndsWith("'");
+			var nonhardened = hardened ? i.Substring(0, i.Length - 1) : i;
+			var index = uint.Parse(nonhardened);
+			return hardened ? index | 0x80000000u : index;
 		}
 
 		public KeyPath(params uint[] indexes)
 		{
 			_Indexes = indexes;
 		}
-		uint[] _Indexes;
+
+	    readonly uint[] _Indexes;
 		public uint this[int index]
 		{
 			get
@@ -37,6 +44,15 @@ namespace NBitcoin
 			{
 				return _Indexes;
 			}
+		}
+
+		public KeyPath Derive(int index, bool hardened)
+		{
+			if(index < 0)
+				throw new ArgumentOutOfRangeException("index", "the index can't be negative");
+			uint realIndex = (uint)index;
+			realIndex = hardened ? realIndex | 0x80000000u : realIndex;
+			return Derive(new KeyPath(realIndex));
 		}
 
 		public KeyPath Derive(uint index)
@@ -61,7 +77,7 @@ namespace NBitcoin
 		}
 		public static bool operator ==(KeyPath a, KeyPath b)
 		{
-			if(System.Object.ReferenceEquals(a, b))
+			if(ReferenceEquals(a, b))
 				return true;
 			if(((object)a == null) || ((object)b == null))
 				return false;
@@ -81,11 +97,24 @@ namespace NBitcoin
 		string _Path;
 		public override string ToString()
 		{
-			if(_Path == null)
+		    return _Path ?? (_Path = string.Join("/", _Indexes.Select(ToString).ToArray()));
+		}
+
+	    private static string ToString(uint i)
+		{
+			var hardened = (i & 0x80000000u) != 0;
+			var nonhardened = (i & ~0x80000000u);
+			return hardened ? nonhardened + "'" : nonhardened.ToString(CultureInfo.InvariantCulture);
+		}
+
+		public bool IsHardened
+		{
+			get
 			{
-				_Path = string.Join("/", _Indexes);
+				if(_Indexes.Length == 0)
+					throw new InvalidOperationException("No indice found in this KeyPath");
+				return (_Indexes[_Indexes.Length - 1] & 0x80000000u) != 0;
 			}
-			return _Path;
 		}
 	}
 }

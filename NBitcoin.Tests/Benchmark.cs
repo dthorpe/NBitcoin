@@ -1,7 +1,8 @@
-﻿using NBitcoin.Crypto;
+﻿#if !NOFILEIO
+using NBitcoin.BitcoinCore;
+using NBitcoin.Crypto;
 using NBitcoin.OpenAsset;
 using NBitcoin.Protocol;
-using NBitcoin.Scanning;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -139,7 +140,7 @@ namespace NBitcoin.Tests
 		public void BenchmarkCreateChainFromBlocks()
 		{
 			BlockStore store = new BlockStore(@"E:\Bitcoin\blocks\", Network.Main);
-			Chain chain = null;
+			PersistantChain chain = null;
 			var fullBuild = Bench(() =>
 			{
 
@@ -149,7 +150,7 @@ namespace NBitcoin.Tests
 			chain.Changes.Rewind();
 			var rebuildFromMemory = Bench(() =>
 			{
-				var chain2 = new Chain(chain.Changes);
+				var chain2 = new PersistantChain(chain.Changes);
 			});
 
 			chain.Changes.Rewind();
@@ -178,3 +179,4 @@ namespace NBitcoin.Tests
 		}
 	}
 }
+#endif

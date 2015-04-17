@@ -10,44 +10,121 @@ using System.Threading.Tasks;
 
 namespace NBitcoin
 {
-	public class PubKey : IBitcoinSerializable
+	public class PubKey : IBitcoinSerializable, IDestination
 	{
+		/// <summary>
+		/// Create a new Public key from string
+		/// </summary>
 		public PubKey(string hex)
 			: this(Encoders.Hex.DecodeData(hex))
 		{
 
 		}
-		public PubKey(byte[] vch)
+
+		/// <summary>
+		/// Create a new Public key from byte array
+		/// </summary>
+		public PubKey(byte[] bytes)
+			: this(bytes, false)
 		{
-			if(!IsValidSize(vch.Length))
+		}
+
+		/// <summary>
+		/// Create a new Public key from byte array
+		/// </summary>
+		/// <param name="bytes">byte array</param>
+		/// <param name="unsafe">If false, make internal copy of bytes and does perform only a costly check for PubKey format. If true, the bytes array is used as is and only PubKey.QuickCheck is used for validating the format. </param>	 
+		public PubKey(byte[] bytes, bool @unsafe)
+		{
+			if(bytes == null)
+				throw new ArgumentNullException("bytes");
+			if(!Check(bytes, false))
 			{
-				throw new FormatException("Invalid public key size");
+				throw new FormatException("Invalid public key");
 			}
-			this.vch = vch.ToArray();
-			_Key = new ECKey(vch, false);
+			if(@unsafe)
+				this.vch = bytes;
+			else
+			{
+				this.vch = bytes.ToArray();
+				try
+				{
+					_ECKey = new ECKey(bytes, false);
+				}
+				catch(Exception ex)
+				{
+					throw new FormatException("Invalid public key", ex);
+				}
+			}
+		}
+
+		ECKey _ECKey;
+		private ECKey ECKey
+		{
+			get
+			{
+				if(_ECKey == null)
+					_ECKey = new ECKey(vch, false);
+				return _ECKey;
+			}
 		}
 
 		public PubKey Compress()
 		{
 			if(IsCompressed)
 				return this;
-			return _Key.GetPubKey(true);
+			return ECKey.GetPubKey(true);
 		}
 		public PubKey Decompress()
 		{
 			if(!IsCompressed)
 				return this;
-			return _Key.GetPubKey(false);
+			return ECKey.GetPubKey(false);
 		}
 
-		public static bool IsValidSize(long size)
+		/// <summary>
+		/// Check on public key format.
+		/// </summary>
+		/// <param name="data">bytes array</param>
+		/// <param name="deep">If false, will only check the first byte and length of the array. If true, will also check that the ECC coordinates are correct.</param>
+		/// <returns>true if byte array is valid</returns>
+		public static bool Check(byte[] data, bool deep)
 		{
-			return size == 65 || size == 33;
+			var quick = data != null &&
+					(
+						(data.Length == 33 && (data[0] == 0x02 || data[0] == 0x03)) ||
+						(data.Length == 65 && (data[0] == 0x04 || data[0] == 0x06 || data[0] == 0x07))
+					);
+			if(!deep || !quick)
+				return quick;
+			try
+			{
+				new ECKey(data, false);
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
 		}
+
 		byte[] vch = new byte[0];
-		ECKey _Key = null;
 		KeyId _ID;
+
+		[Obsolete("Use Hash instead")]
 		public KeyId ID
+		{
+			get
+			{
+				if(_ID == null)
+				{
+					_ID = new KeyId(Hashes.Hash160(vch, vch.Length));
+				}
+				return _ID;
+			}
+		}
+
+		public KeyId Hash
 		{
 			get
 			{
@@ -73,47 +150,31 @@ namespace NBitcoin
 
 		public BitcoinAddress GetAddress(Network network)
 		{
-			return network.CreateBitcoinAddress(this.ID);
+			return network.CreateBitcoinAddress(this.Hash);
 		}
 
 		public BitcoinScriptAddress GetScriptAddress(Network network)
 		{
 			var redeem = PayToPubkeyTemplate.Instance.GenerateScriptPubKey(this);
-			return new BitcoinScriptAddress(redeem.ID, network);
+			return new BitcoinScriptAddress(redeem.Hash, network);
 		}
 
 
 		public bool Verify(uint256 hash, ECDSASignature sig)
 		{
-			return _Key.Verify(hash, sig);
+			return ECKey.Verify(hash, sig);
 		}
 		public bool Verify(uint256 hash, byte[] sig)
 		{
 			return Verify(hash, ECDSASignature.FromDER(sig));
 		}
 
-		Script _HashPaymentScript;
-		public Script HashPaymentScript
-		{
-			get
-			{
-				if(_HashPaymentScript == null)
-				{
-					_HashPaymentScript = PayToPubkeyHashTemplate.Instance.GenerateScriptPubKey(ID);
-				}
-				return _HashPaymentScript;
-			}
-		}
-		Script _PaymentScript;
+		[Obsolete("Use ScriptPubKey instead")]
 		public Script PaymentScript
 		{
 			get
 			{
-				if(_PaymentScript == null)
-				{
-					_PaymentScript = PayToPubkeyTemplate.Instance.GenerateScriptPubKey(this);
-				}
-				return _PaymentScript;
+				return ScriptPubKey;
 			}
 		}
 
@@ -128,7 +189,7 @@ namespace NBitcoin
 		{
 			stream.ReadWrite(ref vch);
 			if(!stream.Serializing)
-				_Key = new ECKey(vch, false);
+				_ECKey = new ECKey(vch, false);
 		}
 
 		#endregion
@@ -153,7 +214,7 @@ namespace NBitcoin
 		public bool VerifyMessage(string message, string signature)
 		{
 			var key = PubKey.RecoverFromMessage(message, signature);
-			return key.ID == ID;
+			return key.Hash == Hash;
 		}
 
 		//Thanks bitcoinj source code
@@ -209,7 +270,7 @@ namespace NBitcoin
 			}
 			else
 			{
-				throw new InvalidOperationException("Impossible to derivate a child key from a hardened one");
+				throw new InvalidOperationException("A public key can't derivate an hardened child");
 			}
 			Array.Copy(lr, l, 32);
 			Array.Copy(lr, 32, r, 0, 32);
@@ -223,7 +284,7 @@ namespace NBitcoin
 			if(parse256LL.CompareTo(N) >= 0)
 				throw new InvalidOperationException("You won a prize ! this should happen very rarely. Take a screenshot, and roll the dice again.");
 
-			var q = ECKey.CURVE.G.Multiply(parse256LL).Add(_Key.GetPublicKeyParameters().Q);
+			var q = ECKey.CURVE.G.Multiply(parse256LL).Add(ECKey.GetPublicKeyParameters().Q);
 			if(q.IsInfinity)
 				throw new InvalidOperationException("You won the big prize ! this would happen only 1 in 2^127. Take a screenshot, and roll the dice again.");
 
@@ -301,7 +362,25 @@ namespace NBitcoin
 
 		public string ToString(Network network)
 		{
-			return new BitcoinAddress(this.ID, network).ToString();
+			return new BitcoinAddress(this.Hash, network).ToString();
 		}
+
+		#region IDestination Members
+
+		Script _ScriptPubKey;
+		public Script ScriptPubKey
+		{
+			get
+			{
+				if(_ScriptPubKey == null)
+				{
+					_ScriptPubKey = PayToPubkeyTemplate.Instance.GenerateScriptPubKey(this);
+				}
+				return _ScriptPubKey;
+			}
+		}
+
+		#endregion
+
 	}
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NBitcoin.BitcoinCore;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -19,7 +20,7 @@ namespace NBitcoin
 		};
 		public static Script PayToAddress(BitcoinAddress address)
 		{
-			return PayToPubkeyHash((KeyId)address.ID);
+			return PayToPubkeyHash((KeyId)address.Hash);
 		}
 
 		private static Script PayToPubkeyHash(KeyId pubkeyHash)
@@ -72,10 +73,14 @@ namespace NBitcoin
 
 			foreach(TxIn txin in tx.Inputs)
 			{
-				// Biggest 'standard' txin is a 3-signature 3-of-3 CHECKMULTISIG
-				// pay-to-script-hash, which is 3 ~80-byte signatures, 3
-				// ~65-byte public keys, plus a few script ops.
-				if(txin.ScriptSig.Length > 500)
+				// Biggest 'standard' txin is a 15-of-15 P2SH multisig with compressed
+				// keys. (remember the 520 byte limit on redeemScript size) That works
+				// out to a (15*(33+1))+3=513 byte redeemScript, 513+1+15*(73+1)+3=1627
+				// bytes of scriptSig, which we round off to 1650 bytes for some minor
+				// future-proofing. That's also enough to spend a 20-of-20
+				// CHECKMULTISIG scriptPubKey, though such a scriptPubKey is not
+				// considered standard)
+				if (txin.ScriptSig.Length > 1650)
 				{
 					return false;
 				}
@@ -132,7 +137,6 @@ namespace NBitcoin
 
 			return template.CheckScriptSig(scriptSig, scriptPubKey);
 		}
-
 
 		//
 		// Check transaction inputs, and make sure any

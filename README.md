@@ -7,6 +7,13 @@ With nuget :
 
 Go on the [nuget website](https://www.nuget.org/packages/NBitcoin/) for more information.
 
+The packages supports the following Portable profile :
+
+* net45
+* portable-net45+win+wpa81+Xamarin.iOS10+MonoAndroid10+MonoTouch10
+* portable-net45+win+wpa81+wp80+Xamarin.iOS10+MonoAndroid10+MonoTouch10
+* portable-net45+MonoAndroid1
+
 To complile it by yourself, you just have to git clone, open the project and hit the compile button on visual studio.
 How to get started ? Check out this article [on CodeProject](http://www.codeproject.com/Articles/768412/NBitcoin-The-most-complete-Bitcoin-port-Part-Crypt) to do some basic crypto operations.
 
@@ -21,6 +28,7 @@ Visual studio express for free, XUnit and you are up to go.
 * Full port of the test suite of bitcoin core with their own data
 * Full script evaluation and parsing
 * RPC Client
+* Mnemonic code for generating deterministic keys ([BIP 39](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki)), credits to [Thasshiznets](https://github.com/Thashiznets/BIP39.NET)
 * Payment Protocol ([BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki))
 * Payment URL ([BIP 21](https://github.com/bitcoin/bips/blob/master/bip-0021.mediawiki),[BIP 72](https://github.com/bitcoin/bips/blob/master/bip-0072.mediawiki))
 * Two Factor keys ([BIP 38](http://www.codeproject.com/Articles/775226/NBitcoin-Cryptography-Part))
@@ -43,10 +51,9 @@ SqLite is a database used.
 Please, use the code to explore/learn/debug/play/sharing/create the licence is MIT, so you should be good to go.
 This is the simple way and most complete way to see the internal of bitcoin without going to C++ madness.
 
-Making NBitcoin Portable is possible and easy, but I can't develop it immediately for reasons expressed ([here](https://github.com/NicolasDorier/NBitcoin/issues/8))  
-
-
 ## Useful doc :
+
+ Ebook [Blockchain Programming in C#](https://aois.blob.core.windows.net/public/Blockchain Programming in CSharp.pdf)
 
 NBitcoin Github : https://github.com/NicolasDorier/NBitcoin
 
@@ -69,4 +76,3 @@ if you want to contact me : http://nicolas-dorier.com/Contact will do the rest b
 
 ##Useful link :
 Visual studio express : http://www.visualstudio.com/en-us/products/visual-studio-express-vs.aspx
-XUnit runner (only if using vs express) : http://xunit.codeplex.com/releases

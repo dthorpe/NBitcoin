@@ -7,21 +7,23 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace NBitcoin
 {
-	public class Key : IBitcoinSerializable
+	public class Key : IBitcoinSerializable, IDestination
 	{
+        private const int KEY_SIZE = 32;
+
 		public static Key Parse(string wif, Network network = null)
 		{
-			return Network.CreateFromBase58Data<BitcoinSecret>(wif, network).Key;
+			return Network.CreateFromBase58Data<BitcoinSecret>(wif, network).PrivateKey;
 		}
+
 		public static Key Parse(string wif, string password, Network network = null)
 		{
-			return Network.CreateFromBase58Data<BitcoinEncryptedSecretNoEC>(wif, network).GetKey(password);
+			return Network.CreateFromBase58Data<BitcoinEncryptedSecret>(wif, network).GetKey(password);
 		}
 
 		byte[] vch = new byte[0];
@@ -37,9 +39,10 @@ namespace NBitcoin
 		{
 
 		}
+
 		public Key(bool fCompressedIn)
 		{
-			byte[] data = new byte[32];
+			byte[] data = new byte[KEY_SIZE];
 
 			do
 			{
@@ -52,7 +55,7 @@ namespace NBitcoin
 		{
 			if(count == -1)
 				count = data.Length;
-			if(count != 32)
+			if(count != KEY_SIZE)
 			{
 				throw new FormatException("The size of an EC key should be 32");
 			}
@@ -66,7 +69,7 @@ namespace NBitcoin
 
 		private void SetBytes(byte[] data, int count, bool fCompressedIn)
 		{
-			vch = new byte[32];
+			vch = new byte[KEY_SIZE];
 			Array.Copy(data, 0, vch, 0, count);
 			IsCompressed = fCompressedIn;
 			_ECKey = new ECKey(vch, true);
@@ -83,12 +86,12 @@ namespace NBitcoin
         0xBF,0xD2,0x5E,0x8C,0xD0,0x36,0x41,0x40
     };
 			bool fIsZero = true;
-			for(int i = 0 ; i < 32 && fIsZero ; i++)
+			for(int i = 0 ; i < KEY_SIZE && fIsZero ; i++)
 				if(vch[i] != 0)
 					fIsZero = false;
 			if(fIsZero)
 				return false;
-			for(int i = 0 ; i < 32 ; i++)
+			for(int i = 0 ; i < KEY_SIZE ; i++)
 			{
 				if(vch[i] < vchMax[i])
 					return true;
@@ -112,11 +115,11 @@ namespace NBitcoin
 			}
 		}
 
-		public byte[] Sign(uint256 hash)
+		public ECDSASignature Sign(uint256 hash)
 		{
 			var signature = _ECKey.Sign(hash);
 			signature = signature.MakeCanonical();
-			return signature.ToDER();
+			return signature;
 		}
 
 
@@ -175,7 +178,6 @@ namespace NBitcoin
 
 		#endregion
 
-
 		public Key Derivate(byte[] cc, uint nChild, out byte[] ccChild)
 		{
 			byte[] l = null;
@@ -193,7 +195,6 @@ namespace NBitcoin
 			Array.Copy(l, ll, 32);
 			Array.Copy(l, 32, lr, 0, 32);
 			ccChild = lr;
-
 
 			BigInteger parse256LL = new BigInteger(1, ll);
 			BigInteger kPar = new BigInteger(1, vch);
@@ -230,6 +231,7 @@ namespace NBitcoin
 		{
 			return new BitcoinSecret(this, network);
 		}
+
 		/// <summary>
 		/// Same than GetBitcoinSecret
 		/// </summary>
@@ -248,6 +250,23 @@ namespace NBitcoin
 		public string ToString(Network network)
 		{
 			return new BitcoinSecret(this, network).ToString();
+		}
+
+		#region IDestination Members
+
+		public Script ScriptPubKey
+		{
+			get
+			{
+				return PubKey.Hash.ScriptPubKey;
+			}
+		}
+
+		#endregion
+
+		public TransactionSignature Sign(uint256 hash, SigHash sigHash)
+		{
+			return new TransactionSignature(Sign(hash), sigHash);
 		}
 	}
 }

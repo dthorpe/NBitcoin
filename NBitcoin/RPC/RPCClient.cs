@@ -175,10 +175,12 @@ namespace NBitcoin.RPC
 			writer.Flush();
 			var json = writer.ToString();
 			var bytes = Encoding.UTF8.GetBytes(json);
+#if !PORTABLE
 			webRequest.ContentLength = bytes.Length;
+#endif
 			Stream dataStream = await webRequest.GetRequestStreamAsync().ConfigureAwait(false);
 			dataStream.Write(bytes, 0, bytes.Length);
-			dataStream.Close();
+			dataStream.Dispose();
 			RPCResponse response = null;
 			try
 			{
@@ -205,7 +207,7 @@ namespace NBitcoin.RPC
 		}
 		public async Task<UnspentCoin[]> ListUnspentAsync()
 		{
-			var response = await SendCommandAsync("listunspent");
+			var response = await SendCommandAsync("listunspent").ConfigureAwait(false);
 			return ((JArray)response.Result).Select(i => new UnspentCoin((JObject)i)).ToArray();
 		}
 
@@ -216,7 +218,7 @@ namespace NBitcoin.RPC
 		}
 		public async Task<BitcoinAddress> GetAccountAddressAsync(string account)
 		{
-			var response = await SendCommandAsync("getaccountaddress", account);
+			var response = await SendCommandAsync("getaccountaddress", account).ConfigureAwait(false);
 			return Network.CreateFromBase58Data<BitcoinAddress>((string)response.Result);
 		}
 
@@ -227,7 +229,7 @@ namespace NBitcoin.RPC
 		}
 		public async Task<BitcoinSecret> DumpPrivKeyAsync(BitcoinAddress address)
 		{
-			var response = await SendCommandAsync("dumpprivkey", address.ToString());
+			var response = await SendCommandAsync("dumpprivkey", address.ToString()).ConfigureAwait(false);
 			return Network.CreateFromBase58Data<BitcoinSecret>((string)response.Result);
 		}
 
@@ -237,7 +239,7 @@ namespace NBitcoin.RPC
 		}
 		public async Task<uint256> GetBestBlockHashAsync()
 		{
-			return new uint256((string)(await SendCommandAsync("getbestblockhash")).Result);
+			return new uint256((string)(await SendCommandAsync("getbestblockhash").ConfigureAwait(false)).Result);
 		}
 
 		public BitcoinSecret GetAccountSecret(string account)
@@ -247,8 +249,8 @@ namespace NBitcoin.RPC
 		}
 		public async Task<BitcoinSecret> GetAccountSecretAsync(string account)
 		{
-			var address = await GetAccountAddressAsync(account);
-			return await DumpPrivKeyAsync(address);
+			var address = await GetAccountAddressAsync(account).ConfigureAwait(false);
+			return await DumpPrivKeyAsync(address).ConfigureAwait(false);
 		}
 
 		public Transaction DecodeRawTransaction(string rawHex)
@@ -262,7 +264,7 @@ namespace NBitcoin.RPC
 		}
 		public async Task<Transaction> DecodeRawTransactionAsync(string rawHex)
 		{
-			var response = await SendCommandAsync("decoderawtransaction", rawHex);
+			var response = await SendCommandAsync("decoderawtransaction", rawHex).ConfigureAwait(false);
 			return Transaction.Parse(response.Result.ToString(), RawFormat.Satoshi);
 		}
 		public Task<Transaction> DecodeRawTransactionAsync(byte[] raw)
@@ -277,18 +279,31 @@ namespace NBitcoin.RPC
 		/// <returns></returns>
 		public Transaction GetRawTransaction(uint256 txid, bool throwIfNotFound = true)
 		{
-			var response = SendCommand(new RPCRequest("getrawtransaction", new[] { txid.ToString() }), throwIfNotFound);
+			try
+			{
+				return GetRawTransactionAsync(txid, throwIfNotFound).Result;
+			}
+			catch(AggregateException aex)
+			{
+				ExceptionDispatchInfo.Capture(aex.InnerException).Throw();
+				return null; //Can't happen
+			}
+		}
+
+		public async Task<Transaction> GetRawTransactionAsync(uint256 txid, bool throwIfNotFound = true)
+		{
+			var response = await SendCommandAsync(new RPCRequest("getrawtransaction", new[] { txid.ToString() }), throwIfNotFound).ConfigureAwait(false);
 			if(throwIfNotFound)
 				response.ThrowIfError();
 			if(response.Error != null && response.Error.Code == RPCErrorCode.RPC_INVALID_ADDRESS_OR_KEY)
 				return null;
 			else
 				response.ThrowIfError();
-
 			var tx = new Transaction();
 			tx.ReadWrite(Encoders.Hex.DecodeData(response.Result.ToString()));
 			return tx;
 		}
+
 
 		public void SendRawTransaction(byte[] bytes)
 		{
@@ -352,7 +367,7 @@ namespace NBitcoin.RPC
 				obj["vout"] = outp.N;
 				array.Add(obj);
 			}
-			await SendCommandAsync("lockunspent", parameters.ToArray());
+			await SendCommandAsync("lockunspent", parameters.ToArray()).ConfigureAwait(false);
 		}
 
 		public BlockHeader GetBlockHeader(int height)
@@ -362,8 +377,8 @@ namespace NBitcoin.RPC
 		}
 		public async Task<BlockHeader> GetBlockHeaderAsync(int height)
 		{
-			var hash = await GetBlockHashAsync(height);
-			return await GetBlockHeaderAsync(hash);
+			var hash = await GetBlockHashAsync(height).ConfigureAwait(false);
+			return await GetBlockHeaderAsync(hash).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -400,7 +415,7 @@ namespace NBitcoin.RPC
 		}
 		public async Task<BlockHeader> GetBlockHeaderAsync(uint256 blockHash)
 		{
-			var resp = await SendCommandAsync("getblock", blockHash.ToString());
+			var resp = await SendCommandAsync("getblock", blockHash.ToString()).ConfigureAwait(false);
 			return ParseBlockHeader(resp);
 		}
 
@@ -463,7 +478,7 @@ namespace NBitcoin.RPC
 
 		public async Task<uint256> GetBlockHashAsync(int height)
 		{
-			var resp = await SendCommandAsync("getblockhash", height);
+			var resp = await SendCommandAsync("getblockhash", height).ConfigureAwait(false);
 			return new uint256(resp.Result.ToString());
 		}
 
@@ -474,7 +489,7 @@ namespace NBitcoin.RPC
 		}
 		public async Task<int> GetBlockCountAsync()
 		{
-			return (int)(await SendCommandAsync("getblockcount")).Result;
+			return (int)(await SendCommandAsync("getblockcount").ConfigureAwait(false)).Result;
 		}
 
 		public uint256[] GetRawMempool()
@@ -485,7 +500,7 @@ namespace NBitcoin.RPC
 		}
 		public async Task<uint256[]> GetRawMempoolAsync()
 		{
-			var result = await SendCommandAsync("getrawmempool");
+			var result = await SendCommandAsync("getrawmempool").ConfigureAwait(false);
 			var array = (JArray)result.Result;
 			return array.Select(o => (string)o).Select(s => new uint256(s)).ToArray();
 		}
@@ -537,5 +552,7 @@ namespace NBitcoin.RPC
 				};
 			}
 		}
+
+		
 	}
 }

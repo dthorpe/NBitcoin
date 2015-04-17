@@ -94,8 +94,8 @@ namespace NBitcoin.Tests
 			public AssetKey()
 			{
 				Key = new Key();
-				ScriptPubKey = Key.PubKey.GetAddress(Network.Main).PaymentScript;
-				Id = ScriptPubKey.ID.ToAssetId();
+				ScriptPubKey = Key.PubKey.GetAddress(Network.Main).ScriptPubKey;
+				Id = ScriptPubKey.Hash.ToAssetId();
 			}
 			public Key Key
 			{
@@ -114,6 +114,7 @@ namespace NBitcoin.Tests
 			}
 		}
 
+#if !PORTABLE
 		//[Fact]
 		public void TestFun()
 		{
@@ -123,6 +124,32 @@ namespace NBitcoin.Tests
 			var prismColored = new CoinprismColoredTransactionRepository().Get(new uint256("b4399a545c4ddd640920d63af75e7367fe4d94b2d7f7a3423105e25ac5f165a6"));
 
 			Assert.True(colored.ToBytes().SequenceEqual(prismColored.ToBytes()));
+		}
+#endif
+
+		[Fact]
+		[Trait("UnitTest", "UnitTest")]
+		public void CanParseColoredAddress()
+		{
+			var address = new BitcoinAddress("16UwLL9Risc3QfPqBUvKofHmBQ7wMtjvM");
+			var colored = address.ToColoredAddress();
+			Assert.Equal("akB4NBW9UuCmHuepksob6yfZs6naHtRCPNy", colored.ToWif());
+			Assert.Equal(address.ScriptPubKey, colored.ScriptPubKey);
+
+			var testAddress = address.ToNetwork(Network.TestNet);
+			var testColored = testAddress.ToColoredAddress();
+
+			Assert.Equal(Network.TestNet, testAddress.Network);
+			Assert.Equal(address.Hash, testAddress.Hash);
+
+			Assert.Equal(colored.ToNetwork(Network.TestNet), testColored);
+
+			Assert.Equal(testAddress.ScriptPubKey, testColored.ScriptPubKey);
+
+			Assert.Equal(Network.TestNet, testColored.Network);
+			testColored = new BitcoinColoredAddress("bWqaKUZETiECYgmJNbNZUoanBxnAzoVjCNx");
+			Assert.Equal(Network.TestNet, testColored.Network);
+			Assert.Equal(colored.ToNetwork(Network.TestNet), testColored);
 		}
 
 		[Fact]
@@ -238,7 +265,22 @@ namespace NBitcoin.Tests
 			return testedTx;
 		}
 
+		[Fact]
+		[Trait("UnitTest", "UnitTest")]
+		public void CanParseAndSetUrlInAssetMetadata()
+		{
+			var tx = new Transaction("0100000001ed6f645a2d0eccf693692bc6677cd3c5efaba021db1527c91b9b441fe16da2f7020000006c493046022100991a71c15ebbf77032fc65ccd16ed286435fcc5ba48435510f561079e46dbb2a022100f1e477385196f083a779fd3366e074d34db12754330f02693520951081d5ab19012103f82af267c2f60b7ce274e7e8bc065dad3c1b0ca7a694801c814f128e63242a12ffffffff0358020000000000001976a91477e3e6acdeca221685d0d23a12989b96335a463988ac0000000000000000276a254f4101000180ade2041b753d68747470733a2f2f6370722e736d2f3954627276364a435776e89c0c00000000001976a9142d14f700c8b0a9ff95cb6092faad0795bf790dc788ac00000000");
 
+			var marker = tx.GetColoredMarker();
+			var url = marker.GetMetadataUrl();
+			Assert.Equal("https://cpr.sm/9Tbrv6JCWv", url.ToString());
+
+			marker.SetMetadataUrl(new Uri("http://toto.com/o"));
+			url = marker.GetMetadataUrl();
+			Assert.Equal("http://toto.com/o", url.ToString());
+		}
+
+#if !PORTABLE
 		[Fact]
 		[Trait("UnitTest", "UnitTest")]
 		public void CanFetchTransactionFromCoinprism()
@@ -255,7 +297,7 @@ namespace NBitcoin.Tests
 			var actual = new CoinprismColoredTransactionRepository().Get(tester.TestedTxId);
 			Assert.True(actual.ToBytes().SequenceEqual(expected.ToBytes()));
 		}
-
+#endif
 		//https://www.coinprism.info/tx/b4399a545c4ddd640920d63af75e7367fe4d94b2d7f7a3423105e25ac5f165a6
 		//Asset Id : 3QzJDrSsi4Pm2DhcZFXR9MGJsXXtsYhUsq
 		//1BvvRfz4XnxSWJ524TusetYKrtZnAbgV3r to 18Jcv42cRknPmxrQPb2zSBuEVWq3egjCKq
@@ -409,11 +451,11 @@ namespace NBitcoin.Tests
 
 			var oo = script.GetScriptAddress(Network.Main);
 			//The script is hashed: 36e0ea8e93eaa0285d641305f4c81e563aa570a2.
-			Assert.Equal("36e0ea8e93eaa0285d641305f4c81e563aa570a2", script.ID.ToString());
+			Assert.Equal("36e0ea8e93eaa0285d641305f4c81e563aa570a2", script.Hash.ToString());
 
-			Assert.Equal("36e0ea8e93eaa0285d641305f4c81e563aa570a2", key.PubKey.Decompress().HashPaymentScript.ID.ToString());
+			Assert.Equal("36e0ea8e93eaa0285d641305f4c81e563aa570a2", key.PubKey.Decompress().Hash.ScriptPubKey.Hash.ToString());
 			//Finally, the hash is converted to a base 58 string with checksum using version byte 23: ALn3aK1fSuG27N96UGYB1kUYUpGKRhBuBC. 
-			Assert.Equal("ALn3aK1fSuG27N96UGYB1kUYUpGKRhBuBC", script.ID.ToAssetId().GetWif(Network.Main).ToString());
+			Assert.Equal("ALn3aK1fSuG27N96UGYB1kUYUpGKRhBuBC", script.Hash.ToAssetId().GetWif(Network.Main).ToString());
 		}
 
 	}

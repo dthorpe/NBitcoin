@@ -1,25 +1,29 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace NBitcoin
+﻿namespace NBitcoin
 {
-	public abstract class BitcoinExtKeyBase : Base58Data
+	public abstract class BitcoinExtKeyBase : Base58Data, IDestination
 	{
-		public BitcoinExtKeyBase(IBitcoinSerializable key, Network network)
+	    protected BitcoinExtKeyBase(IBitcoinSerializable key, Network network)
 			: base(key.ToBytes(), network)
 		{
 		}
-		public BitcoinExtKeyBase(string base58, Network network)
+
+	    protected BitcoinExtKeyBase(string base58, Network network)
 			: base(base58, network)
 		{
 		}
 
+
+		#region IDestination Members
+
+		public abstract Script ScriptPubKey
+		{
+			get;
+		}
+
+		#endregion
 	}
 
-	public class BitcoinExtKey : BitcoinExtKeyBase
+	public class BitcoinExtKey : BitcoinExtKeyBase, ISecret
 	{
 		public BitcoinExtKey(string base58, Network expectedNetwork = null)
 			: base(base58, expectedNetwork)
@@ -62,6 +66,26 @@ namespace NBitcoin
 				return Base58Type.EXT_SECRET_KEY;
 			}
 		}
+
+		public override Script ScriptPubKey
+		{
+			get
+			{
+				return ExtKey.ScriptPubKey;
+			}
+		}
+
+		#region ISecret Members
+
+		public Key PrivateKey
+		{
+			get
+			{
+				return ExtKey.PrivateKey;
+			}
+		}
+
+		#endregion
 	}
 	public class BitcoinExtPubKey : BitcoinExtKeyBase
 	{
@@ -95,6 +119,14 @@ namespace NBitcoin
 			get
 			{
 				return Base58Type.EXT_PUBLIC_KEY;
+			}
+		}
+
+		public override Script ScriptPubKey
+		{
+			get
+			{
+				return ExtPubKey.ScriptPubKey;
 			}
 		}
 	}

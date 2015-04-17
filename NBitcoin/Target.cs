@@ -36,7 +36,7 @@ namespace NBitcoin
 			};
 		}
 
-		
+
 
 		BigInteger _Target;
 		public Target(byte[] compact)
@@ -51,7 +51,11 @@ namespace NBitcoin
 				throw new FormatException("Invalid number of bytes");
 		}
 
+#if !NOBIGINT
 		public Target(BigInteger target)
+#else
+		internal Target(BigInteger target)
+#endif
 		{
 			_Target = target;
 			_Target = new Target(this.ToCompact())._Target;
@@ -136,7 +140,11 @@ namespace NBitcoin
 			return _Target.GetHashCode();
 		}
 
+#if !NOBIGINT
 		public BigInteger ToBigInteger()
+#else
+		internal BigInteger ToBigInteger()
+#endif
 		{
 			return _Target;
 		}
@@ -151,7 +159,7 @@ namespace NBitcoin
 			var array = _Target.ToByteArray();
 			var missingZero = 32 - array.Length;
 			if(missingZero < 0)
-				throw new InvalidProgramException("Awful bug, this should never happen");
+				throw new InvalidOperationException("Awful bug, this should never happen");
 			if(missingZero != 0)
 			{
 				array = array.Concat(new byte[missingZero]).ToArray();

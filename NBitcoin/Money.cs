@@ -20,6 +20,14 @@ namespace NBitcoin
 			return new Money(result);
 		}
 	}
+
+	public enum MoneyUnit : int
+	{
+		BTC = 100000000,
+		MilliBTC = 100000,
+		Bit = 100,
+		Satoshi = 1
+	}
 	public class Money : IComparable, IComparable<Money>, IEquatable<Money>
 	{
 		public const long COIN = 100000000;
@@ -29,16 +37,14 @@ namespace NBitcoin
 		public static bool TryParse(string bitcoin, out Money nRet)
 		{
 			nRet = new Money(0);
-			if(bitcoin.Length == 0)
+            if (string.IsNullOrEmpty(bitcoin))
 				return false;
 
 			string strWhole = "";
 			long nUnits = 0;
 
-
 			int i = 0;
-			if(i >= bitcoin.Length)
-				return false;
+
 			while(DataEncoder.IsSpace(bitcoin[i]))
 			{
 				if(i >= bitcoin.Length)
@@ -82,6 +88,7 @@ namespace NBitcoin
 				return false;
 			if(nUnits < 0 || nUnits > COIN)
 				return false;
+
 			var nWhole = BigInteger.Parse(strWhole);
 			var nValue = nWhole * COIN + nUnits;
 
@@ -97,8 +104,8 @@ namespace NBitcoin
 			}
 			throw new FormatException("Impossible to parse the string in a bitcoin amount");
 		}
-		BigInteger _Satoshis;
-		public BigInteger Satoshi
+		long _Satoshis;
+		public long Satoshi
 		{
 			get
 			{
@@ -106,53 +113,81 @@ namespace NBitcoin
 			}
 		}
 
-		public Money(BigInteger satoshis)
+		/// <summary>
+		/// Get absolute value of the instance
+		/// </summary>
+		/// <param name="a"></param>
+		/// <param name="b"></param>
+		/// <returns></returns>
+		public Money Abs()
 		{
-			_Satoshis = satoshis;
+			var a = this;
+			if(a < Money.Zero)
+				a = -a;
+			return a;
+		}
+
+#if !NOBIGINT
+		public Money(BigInteger satoshis)
+#else
+		internal Money(BigInteger satoshis)
+#endif
+		{
+			_Satoshis = (long)satoshis;
 		}
 
 		public Money(int satoshis)
 		{
-			_Satoshis = new BigInteger(satoshis);
+			_Satoshis = satoshis;
 		}
 
         public Money(uint satoshis)
         {
-            _Satoshis = new BigInteger(satoshis);
+			_Satoshis = satoshis;
         }
 
         public Money(long satoshis)
 		{
-			_Satoshis = new BigInteger(satoshis);
+			_Satoshis = satoshis;
 		}
 		public Money(ulong satoshis)
 		{
-			_Satoshis = new BigInteger(satoshis);
+			_Satoshis = (long)satoshis;
 		}
 
-        public Money(decimal satoshis)
-            : this(new BigInteger(satoshis))
-        {
-        }
+		public Money(decimal amount, MoneyUnit unit)
+		{
+			_Satoshis = (long)(amount * (int)unit);
+		}
+
+		public static Money FromUnit(decimal amount, MoneyUnit unit)
+		{
+			return new Money(amount, unit);
+		}
+
+		public decimal ToUnit(MoneyUnit unit)
+		{
+			return (decimal)Satoshi / (int)unit;
+		}
 
         public static Money Coins(decimal coins)
         {
-            return new Money(coins * COIN);
+            return new Money((long)(coins * COIN));
         }
 
         public static Money Bits(decimal bits)
         {
-            return new Money(bits * CENT);
+            return new Money((long)(bits * CENT));
         }
 
         public static Money Cents(decimal cents)
         {
-            return new Money(cents * CENT);
+            return new Money((long)(cents * CENT));
         }
 
         public static Money Satoshis(decimal sats)
         {
-            return new Money(sats);
+            return new Money((long)(sats));
         }
 
         public static Money Satoshis(ulong sats)
@@ -186,7 +221,11 @@ namespace NBitcoin
 			Money m = obj as Money;
 			if(m != null)
 				return _Satoshis.CompareTo(m._Satoshis);
+#if !PORTABLE
 			return _Satoshis.CompareTo(obj);
+#else
+			return _Satoshis.CompareTo((long)obj);
+#endif
 		}
 
 		#endregion
@@ -203,13 +242,37 @@ namespace NBitcoin
 		{
 			return new Money(left._Satoshis + right._Satoshis);
 		}
-		public static Money operator *(Money left, Money right)
+		public static Money operator *(decimal left, Money right)
 		{
-			return new Money(left._Satoshis * right._Satoshis);
+			return Money.Satoshis(left * right._Satoshis);
 		}
-		public static Money operator /(Money left, Money right)
+		public static Money operator /(decimal left, Money right)
 		{
-			return new Money(left._Satoshis / right._Satoshis);
+			return Money.Satoshis(left / right._Satoshis);
+		}
+		public static Money operator *(double left, Money right)
+		{
+			return Money.Satoshis((decimal)(left * right._Satoshis));
+		}
+		public static Money operator /(double left, Money right)
+		{
+			return Money.Satoshis((decimal)(left / right._Satoshis));
+		}
+		public static Money operator *(int left, Money right)
+		{
+			return Money.Satoshis(left * right._Satoshis);
+		}
+		public static Money operator /(int left, Money right)
+		{
+			return Money.Satoshis(left / right._Satoshis);
+		}
+		public static Money operator *(long left, Money right)
+		{
+			return Money.Satoshis(left * right._Satoshis);
+		}
+		public static Money operator /(long left, Money right)
+		{
+			return Money.Satoshis(left / right._Satoshis);
 		}
 
 		public static bool operator <(Money left, Money right)
@@ -269,16 +332,6 @@ namespace NBitcoin
 		public static implicit operator Money(string value)
 		{
 			return Money.Parse(value);
-        }
-
-        public static implicit operator Money(decimal value)
-        {
-            return new Money(value);
-        }
-
-        public static implicit operator decimal(Money value)
-        {
-            return (decimal)value.Satoshi;
         }
 
 		public override bool Equals(object obj)
@@ -361,6 +414,44 @@ namespace NBitcoin
 			{
 				return _Dust;
 			}
+		}
+
+		/// <summary>
+		/// Tell if amount is almost equal to this instance
+		/// </summary>
+		/// <param name="amount"></param>
+		/// <param name="dust">more or less dust (default : 600 satoshi)</param>
+		/// <returns>true if equals, else false</returns>
+		public bool Almost(Money amount, Money dust = null)
+		{
+			if(dust == null)
+				dust = Dust;
+			return (amount - this).Abs() <= dust;
+		}
+		
+		/// <summary>
+		/// Tell if amount is almost equal to this instance
+		/// </summary>
+		/// <param name="amount"></param>
+		/// <param name="margin">error margin (between 0 and 1)</param>
+		/// <returns>true if equals, else false</returns>
+		public bool Almost(Money amount, decimal margin)
+		{
+			if(margin < 0.0m || margin > 1.0m)
+				throw new ArgumentOutOfRangeException("margin", "margin should be between 0 and 1");
+			 var dust = Money.Satoshis((decimal)amount.Satoshi * margin);
+			 return Almost(amount, dust);
+		}
+
+		public static Money Min(Money a, Money b)
+		{
+			if(a == null)
+				throw new ArgumentNullException("a");
+			if(b == null)
+				throw new ArgumentNullException("b");
+			if(a <= b)
+				return a;
+			return b;
 		}
 	}
 }

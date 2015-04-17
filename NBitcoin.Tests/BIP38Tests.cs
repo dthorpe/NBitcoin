@@ -48,7 +48,7 @@ namespace NBitcoin.Tests
 			Parallel.ForEach(tests, test =>
 			{
 				var secret = new BitcoinSecret(test.Unencrypted, Network.Main);
-				var encryptedKey = secret.Key.GetEncryptedBitcoinSecret(test.Passphrase, Network.Main);
+				var encryptedKey = secret.PrivateKey.GetEncryptedBitcoinSecret(test.Passphrase, Network.Main);
 				Assert.Equal(test.Encrypted, encryptedKey.ToString());
 
 				var actualSecret = encryptedKey.GetKey(test.Passphrase);
@@ -56,6 +56,29 @@ namespace NBitcoin.Tests
 
 				Assert.Equal(test.Compressed, actualSecret.IsCompressed);
 			});
+		}
+
+
+		[Fact]
+		[Trait("UnitTest", "UnitTest")]
+		//Encrypted keys base58 string do not have network information
+		public void DoNotThrowFormatExceptionIfNetworkInformationNotPresentInBase58()
+		{
+			Network network = Network.TestNet;
+			var encryptedPrivateKey = new Key().GetEncryptedBitcoinSecret("abc123", network).ToString();
+			Key key = Key.Parse(encryptedPrivateKey, "abc123", network);
+		}
+
+		[Fact]
+		[Trait("UnitTest", "UnitTest")]
+		public void KeyParseWorksOnBothTypeOfEncryptedKey()
+		{
+			var encryptedkey = new Key().GetEncryptedBitcoinSecret("abc", Network.Main);
+			Key.Parse(encryptedkey.ToString(), "abc", Network.Main);
+
+			var code = new BitcoinPassphraseCode("abc", Network.Main, null);
+			var encryptedkey2 = code.GenerateEncryptedSecret().EncryptedKey;
+			Key.Parse(encryptedkey2.ToString(), "abc", Network.Main);
 		}
 
 		[Fact]

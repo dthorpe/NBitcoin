@@ -98,6 +98,50 @@ namespace NBitcoin.Tests
 
 		[Fact]
 		[Trait("UnitTest", "UnitTest")]
+		public void CanRecoverExtKeyFromExtPubKeyAndOneChildExtKey()
+		{
+			ExtKey key = ExtKey.Parse("xprv9s21ZrQH143K3Z9EwCXrA5VbypnvWGiE9z22S1cLLPi7r8DVUkTabBvMjeirS8KCyppw24KoD4sFmja8UDU4VL32SBdip78LY6sz3X2GPju")
+				.Derive(1);
+			var pubkey = key.Neuter();
+			var childKey = key.Derive(1);
+
+			ExtKey recovered = childKey.GetParentExtKey(pubkey);
+			Assert.Equal(recovered.ToString(Network.Main), key.ToString(Network.Main));
+
+			childKey = key.Derive(1, true);
+			Assert.Throws<InvalidOperationException>(() => childKey.GetParentExtKey(pubkey));
+
+			childKey = key.Derive(1).Derive(1);
+			Assert.Throws<ArgumentException>(() => childKey.GetParentExtKey(pubkey));
+		}
+
+		[Fact]
+		[Trait("UnitTest", "UnitTest")]
+		public void CanRecoverExtKeyFromExtPubKeyAndOneChildExtKey2()
+		{
+			for(int i = 0 ; i < 255 ; i++)
+			{
+				ExtKey key = new ExtKey().Derive((uint)i);
+				var childKey = key.Derive((uint)i);
+				var pubKey = key.Neuter();
+				ExtKey recovered = childKey.GetParentExtKey(pubKey);
+				Assert.Equal(recovered.ToString(Network.Main), key.ToString(Network.Main));
+			}
+		}
+
+		[Fact]
+		[Trait("UnitTest", "UnitTest")]
+		public void CanRecoverExtKeyFromExtPubKeyAndSecret()
+		{
+			ExtKey key = new ExtKey().Derive(1);
+			var underlying = key.PrivateKey.GetBitcoinSecret(Network.Main);
+			var pubKey = key.Neuter().GetWif(Network.Main);
+			ExtKey key2 = new ExtKey(pubKey, underlying);
+			Assert.Equal(key.ToString(Network.Main), key2.ToString(Network.Main));
+		}
+
+		[Fact]
+		[Trait("UnitTest", "UnitTest")]
 		public void CanUseKeyPath()
 		{
 			var keyPath = new KeyPath("0/1/2/3");
@@ -119,6 +163,31 @@ namespace NBitcoin.Tests
 							.ToString(Network.Main), neuter.Derive(keyPath).ToString(Network.Main));
 
 			Assert.Equal(neuter.Derive(keyPath).ToString(Network.Main), key.Derive(keyPath).Neuter().ToString(Network.Main));
+
+			keyPath = new KeyPath(new uint[] { 0x8000002Cu, 1u });
+			Assert.Equal(keyPath.ToString(), "44'/1");
+
+			keyPath = new KeyPath("44'/1");
+			Assert.False(keyPath.IsHardened);
+			Assert.True(new KeyPath("44'/1'").IsHardened);
+			Assert.Equal(keyPath[0], 0x8000002Cu);
+			Assert.Equal(keyPath[1], 1u);
+
+			key = new ExtKey();
+			Assert.Equal(key.Derive(keyPath).ToString(Network.Main), key.Derive(44, true).Derive(1, false).ToString(Network.Main));
+
+			keyPath = new KeyPath("");
+			keyPath = keyPath.Derive(44, true).Derive(1, false);
+			Assert.Equal(keyPath.ToString(), "44'/1");
+			Assert.Equal(key.Derive(keyPath).ToString(Network.Main), key.Derive(44, true).Derive(1, false).ToString(Network.Main));
+
+			Assert.True(key.Derive(44, true).IsHardened);
+			Assert.False(key.Derive(44, false).IsHardened);
+
+			neuter = key.Derive(44, true).Neuter();
+			Assert.True(neuter.IsHardened);
+			neuter = key.Derive(44, false).Neuter();
+			Assert.False(neuter.IsHardened);
 		}
 
 		[Fact]

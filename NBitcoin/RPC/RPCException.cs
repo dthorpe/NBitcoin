@@ -49,7 +49,7 @@ namespace NBitcoin.RPC
 	}
 
 
-	[Serializable]
+	
 	public class RPCException : Exception
 	{
 		public RPCException(RPCErrorCode code, string message, RPCResponse result)
@@ -116,13 +116,6 @@ namespace NBitcoin.RPC
 			{
 				return _RPCCodeMessage;
 			}
-		}
-
-		protected RPCException(
-		  System.Runtime.Serialization.SerializationInfo info,
-		  System.Runtime.Serialization.StreamingContext context)
-			: base(info, context)
-		{
 		}
 	}
 }

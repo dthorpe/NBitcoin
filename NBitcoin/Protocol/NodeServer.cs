@@ -1,4 +1,7 @@
-﻿using Mono.Nat;
+﻿#if !NOSOCKET
+#if !NOUPNP
+using Mono.Nat;
+#endif
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -10,6 +13,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using NBitcoin.BitcoinCore;
 
 namespace NBitcoin.Protocol
 {
@@ -121,7 +125,7 @@ namespace NBitcoin.Protocol
 				_NATRuleName = value;
 			}
 		}
-
+#if !NOUPNP
 		UPnPLease _UPnPLease;
 		public UPnPLease DetectExternalEndpoint(CancellationToken cancellation = default(CancellationToken))
 		{
@@ -157,6 +161,7 @@ namespace NBitcoin.Protocol
 				return null;
 			}
 		}
+#endif
 		public bool AllowLocalPeers
 		{
 			get;
@@ -229,7 +234,11 @@ namespace NBitcoin.Protocol
 			{
 				try
 				{
-					socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+					socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp);
+#if !NOIPDUALMODE
+					socket.DualMode = true;
+#endif
+
 					socket.Bind(LocalEndpoint);
 					socket.Listen(8);
 					NodeServerTrace.Information("Listening...");
@@ -298,7 +307,7 @@ namespace NBitcoin.Protocol
 
 			var tasks = new[]{
 						new {IP = "91.198.22.70", DNS ="checkip.dyndns.org"}, 
-						new {IP = "74.208.43.192", DNS = "www.showmyip.com"}
+						new {IP = "209.68.27.16", DNS = "www.ipchicken.com"}
 			 }.Select(site =>
 			 {
 				 return Task.Run(() =>
@@ -324,7 +333,7 @@ namespace NBitcoin.Protocol
 			try
 			{
 				var result = tasks.First(t => t.IsCompleted && !t.IsFaulted).Result;
-				NodeServerTrace.ExternalIpRecieved(result);
+				NodeServerTrace.ExternalIpReceived(result);
 				return IPAddress.Parse(result);
 			}
 			catch(InvalidOperationException)
@@ -593,10 +602,12 @@ namespace NBitcoin.Protocol
 				}
 				finally
 				{
+#if !NOUPNP
 					if(_UPnPLease != null)
 					{
 						_UPnPLease.Dispose();
 					}
+#endif
 					if(socket != null)
 					{
 						Utils.SafeCloseSocket(socket);
@@ -618,7 +629,7 @@ namespace NBitcoin.Protocol
 						Version = version == null ? Version : version.Value,
 						StartHeight = 0,
 						Timestamp = DateTimeOffset.UtcNow,
-						AddressReciever = peer.NetworkAddress.Endpoint,
+						AddressReceiver = peer.NetworkAddress.Endpoint,
 						AddressFrom = myExternal,
 						Relay = IsRelay
 					};
@@ -837,6 +848,8 @@ namespace NBitcoin.Protocol
 			}
 			return new CompositeDisposable(AllMessages.AddMessageListener(poll), _InternalMessageProducer.AddMessageListener(poll), OwnResource(poll));
 		}
+
+#if !NOFILEIO
 		public IDisposable RegisterBlockRepository(BlockRepository repository)
 		{
 			var listener = new EventLoopMessageListener<IncomingMessage>((m) =>
@@ -858,9 +871,11 @@ namespace NBitcoin.Protocol
 			});
 			return new CompositeDisposable(AllMessages.AddMessageListener(listener), OwnResource(listener));
 		}
+#endif
 		public Node GetLocalNode()
 		{
 			return GetNodeByEndpoint(new IPEndPoint(IPAddress.Loopback, ExternalEndpoint.Port));
 		}
 	}
 }
+#endif

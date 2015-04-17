@@ -9,20 +9,27 @@ namespace NBitcoin.OpenAsset
 {
 	public class AssetId
 	{
-		byte[] _Bytes;
+		internal byte[] _Bytes;
 
 		public AssetId()
 		{
 			_Bytes = new byte[] { 0 };
 		}
 
-		public AssetId(BitcoinSecret assetIssuanceKey)
-			: this(assetIssuanceKey.GetAddress())
+		public AssetId(IDestination assetScriptPubKey)
+			: this(assetScriptPubKey.ScriptPubKey)
 		{
 		}
 
-		public AssetId(BitcoinAddress assetIssuanceKeyAddress)
-			: this(assetIssuanceKeyAddress.ID.CreateScriptPubKey().ID)
+		public AssetId(BitcoinAssetId assetId)
+		{
+			if(assetId == null)
+				throw new ArgumentNullException("assetId");
+			_Bytes = assetId.AssetId._Bytes;
+		}
+
+		public AssetId(Script assetScriptPubKey)
+			: this(assetScriptPubKey.Hash)
 		{
 		}
 
@@ -49,7 +56,7 @@ namespace NBitcoin.OpenAsset
 
 		public BitcoinAssetId GetWif(Network network)
 		{
-			return new BitcoinAssetId(_Bytes, network);
+			return new BitcoinAssetId(this, network);
 		}
 
 		public byte[] ToBytes()

@@ -72,7 +72,7 @@ namespace NBitcoin.RPC
 
 				if(txin.PrevOut.Hash == new uint256(0))
 				{
-					WritePropertyValue(writer, "coinbase", Encoders.Hex.EncodeData(txin.ScriptSig.ToRawScript()));
+					WritePropertyValue(writer, "coinbase", Encoders.Hex.EncodeData(txin.ScriptSig.ToBytes()));
 				}
 				else
 				{
@@ -82,7 +82,7 @@ namespace NBitcoin.RPC
 					writer.WriteStartObject();
 
 					WritePropertyValue(writer, "asm", txin.ScriptSig.ToString());
-					WritePropertyValue(writer, "hex", Encoders.Hex.EncodeData(txin.ScriptSig.ToRawScript()));
+					WritePropertyValue(writer, "hex", Encoders.Hex.EncodeData(txin.ScriptSig.ToBytes()));
 
 					writer.WriteEndObject();
 				}
@@ -106,13 +106,13 @@ namespace NBitcoin.RPC
 				writer.WriteStartObject();
 
 				WritePropertyValue(writer, "asm", txout.ScriptPubKey.ToString());
-				WritePropertyValue(writer, "hex", Encoders.Hex.EncodeData(txout.ScriptPubKey.ToRawScript()));
+				WritePropertyValue(writer, "hex", Encoders.Hex.EncodeData(txout.ScriptPubKey.ToBytes()));
 
 				var destinations = new List<TxDestination>() { txout.ScriptPubKey.GetDestination() };
 				if(destinations[0] == null)
 				{
 					destinations = txout.ScriptPubKey.GetDestinationPublicKeys()
-														.Select(p => p.ID)
+														.Select(p => p.Hash)
 														.ToList<TxDestination>();
 				}
 				if(destinations.Count == 1)
@@ -132,7 +132,7 @@ namespace NBitcoin.RPC
 					writer.WriteStartArray();
 					foreach(var key in multi.PubKeys)
 					{
-						writer.WriteValue(BitcoinAddress.Create(key.ID, Network).ToString());
+						writer.WriteValue(BitcoinAddress.Create(key.Hash, Network).ToString());
 					}
 					writer.WriteEndArray();
 				}
@@ -150,7 +150,7 @@ namespace NBitcoin.RPC
 			var btc = satoshis / Money.COIN;
 			//return btc.ToString("0.###E+00", CultureInfo.InvariantCulture);
 			var result = ((double)btc).ToString(CultureInfo.InvariantCulture);
-			if(!result.Contains('.'))
+			if(!result.ToCharArray().Contains('.'))
 				result = result + ".0";
 			return result;
 		}

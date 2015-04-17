@@ -296,7 +296,11 @@ namespace NBitcoin
 				return OpcodeType.OP_INVALIDOPCODE;
 		}
 
+#if !NOBIGINT
 		public static Op GetPushOp(BigInteger data)
+#else
+		internal static Op GetPushOp(BigInteger data)
+#endif
 		{
 			return GetPushOp(Utils.BigIntegerToBytes(data));
 		}
@@ -314,10 +318,15 @@ namespace NBitcoin
 				op.Code = (OpcodeType)(byte)data.Length;
 			else if(data.Length <= 0xFF)
 				op.Code = OpcodeType.OP_PUSHDATA1;
+#if !PORTABLE
 			else if(data.LongLength <= 0xFFFF)
 				op.Code = OpcodeType.OP_PUSHDATA2;
 			else if(data.LongLength <= 0xFFFFFFFF)
 				op.Code = OpcodeType.OP_PUSHDATA4;
+#else
+			else if(data.Length <= 0xFFFF)
+				op.Code = OpcodeType.OP_PUSHDATA2;
+#endif
 			else
 				throw new NotSupportedException("Data length should not be bigger than 0xFFFFFFFF");
 			return op;
@@ -597,7 +606,11 @@ namespace NBitcoin
 				return IsSmallUInt || Code == OpcodeType.OP_1NEGATE;
 			}
 		}
+#if !NOBIGINT
 		public BigInteger? GetValue()
+#else
+		internal BigInteger? GetValue()
+#endif
 		{
 			if(PushData == null)
 				return null;

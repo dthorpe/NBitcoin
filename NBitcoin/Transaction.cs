@@ -328,7 +328,7 @@ namespace NBitcoin
 		}
 		public ScriptCompressor(Script script)
 		{
-			_Script = script.ToRawScript(true);
+			_Script = script.ToBytes(true);
 		}
 		public ScriptCompressor()
 		{
@@ -456,7 +456,7 @@ namespace NBitcoin
 				{
 					byte[] vch = new byte[GetSpecialSize(nSize)];
 					stream.ReadWrite(ref vch);
-					_Script = Decompress(nSize, vch).ToRawScript();
+					_Script = Decompress(nSize, vch).ToBytes();
 					return;
 				}
 				nSize -= nSpecialScripts;
@@ -479,7 +479,7 @@ namespace NBitcoin
 		#endregion
 	}
 
-	public class TxOut : IBitcoinSerializable
+	public class TxOut : IBitcoinSerializable, IDestination
 	{
 		Script publicKey = Script.Empty;
 		public Script ScriptPubKey
@@ -510,41 +510,18 @@ namespace NBitcoin
 		{
 
 		}
-		public TxOut(Money value, BitcoinAddress bitcoinAddress)
-		{
-			if(bitcoinAddress == null)
-				throw new ArgumentNullException("bitcoinAddress");
-			if(value == null)
-				throw new ArgumentNullException("value");
-			Value = value;
-			SetDestination(bitcoinAddress.ID);
-		}
 
-		public TxOut(Money value, KeyId keyId)
+		public TxOut(Money value, IDestination destination)
 		{
 			Value = value;
-			SetDestination(keyId);
-		}
-		public TxOut(Money value, ScriptId scriptId)
-		{
-			Value = value;
-			SetDestination(scriptId);
+			if(destination != null)
+				ScriptPubKey = destination.ScriptPubKey;
 		}
 
 		public TxOut(Money value, Script scriptPubKey)
 		{
 			Value = value;
 			ScriptPubKey = scriptPubKey;
-		}
-		public TxOut(Money value, PubKey pubkey)
-		{
-			Value = value;
-			ScriptPubKey = PayToPubkeyTemplate.Instance.GenerateScriptPubKey(pubkey);
-		}
-
-		private void SetDestination(TxDestination destination)
-		{
-			ScriptPubKey = destination.CreateScriptPubKey();
 		}
 
 		public Money Value
@@ -560,7 +537,7 @@ namespace NBitcoin
 				if(value == null)
 					throw new ArgumentNullException("value");
 				if(value.Satoshi > long.MaxValue || value.Satoshi < long.MinValue)
-					throw new ArgumentOutOfRangeException("satoshi's value should be between Int64.Max and Int64.Min");
+					throw new ArgumentOutOfRangeException("value", "satoshi's value should be between Int64.Max and Int64.Min");
 				_MoneyValue = value;
 				this.value = (long)_MoneyValue.Satoshi;
 			}
@@ -594,41 +571,10 @@ namespace NBitcoin
 
 		#endregion
 
-		/// <summary>
-		/// Verify belongs to the given address
-		/// </summary>
-		/// <param name="address">P2PKH or P2SH address</param>
-		/// <returns></returns>
-		public bool IsTo(BitcoinAddress address)
+		public bool IsTo(IDestination destination)
 		{
-			if(address == null)
-				throw new ArgumentNullException("address");
-			return IsTo(address.ID);
+			return ScriptPubKey == destination.ScriptPubKey;
 		}
-
-		/// <summary>
-		/// Verify belongs to the given address
-		/// </summary>
-		/// <param name="address">P2PKH or P2SH address</param>
-		/// <returns></returns>
-		public bool IsTo(TxDestination destination)
-		{
-			return ScriptPubKey.GetDestination() == destination;
-		}
-
-		/// <summary>
-		/// Verify is a P2PK of the given public key
-		/// </summary>
-		/// <param name="pubkey"></param>
-		/// <returns></returns>
-		public bool IsTo(PubKey pubkey)
-		{
-			var owners = ScriptPubKey.GetDestinationPublicKeys();
-			if(owners.Length != 1)
-				return false;
-			return owners[0] == pubkey;
-		}
-
 
 		internal void SetNull()
 		{
@@ -636,8 +582,72 @@ namespace NBitcoin
 		}
 	}
 
+	public class IndexedTxIn
+	{
+		public TxIn TxIn
+		{
+			get;
+			set;
+		}
+		public uint N
+		{
+			get;
+			set;
+		}
+
+		public OutPoint PrevOut
+		{
+			get
+			{
+				return TxIn.PrevOut;
+			}
+		}
+
+		public Transaction Transaction
+		{
+			get;
+			set;
+		}
+
+		public bool VerifyScript(Script scriptPubKey, ScriptVerify scriptVerify = ScriptVerify.Standard)
+		{
+			ScriptError unused;
+			return VerifyScript(scriptPubKey, scriptVerify, out unused);
+		}
+		public bool VerifyScript(Script scriptPubKey, out ScriptError error)
+		{
+			return Script.VerifyScript(Transaction.Inputs[N].ScriptSig, scriptPubKey, Transaction, (int)N, out error);
+		}
+		public bool VerifyScript(Script scriptPubKey, ScriptVerify scriptVerify, out ScriptError error)
+		{
+			return Script.VerifyScript(Transaction.Inputs[N].ScriptSig, scriptPubKey, Transaction, (int)N, scriptVerify, SigHash.Undefined, out error);
+		}
+
+		public uint256 GetSignatureHash(Script scriptPubKey, SigHash sigHash = SigHash.All)
+		{
+			return scriptPubKey.SignatureHash(Transaction, (int)N, sigHash);
+		}
+		public TransactionSignature Sign(ISecret secret, Script scriptPubKey, SigHash sigHash = SigHash.All)
+		{
+			return Sign(secret.PrivateKey, scriptPubKey, sigHash);
+		}
+		public TransactionSignature Sign(Key key, Script scriptPubKey, SigHash sigHash = SigHash.All)
+		{
+			var hash = GetSignatureHash(scriptPubKey, sigHash);
+			return key.Sign(hash, sigHash);
+		}
+	}
 	public class TxInList : UnsignedList<TxIn>
 	{
+		public TxInList()
+		{
+
+		}
+		public TxInList(Transaction parent)
+			: base(parent)
+		{
+
+		}
 		public TxIn this[OutPoint outpoint]
 		{
 			get
@@ -648,6 +658,17 @@ namespace NBitcoin
 			{
 				this[outpoint.N] = value;
 			}
+		}
+
+		public IEnumerable<IndexedTxIn> AsIndexedInputs()
+		{
+			// We want i as the index of txIn in Intputs[], not index in enumerable after where filter
+			return this.Select((r, i) => new IndexedTxIn()
+			{
+				TxIn = r,
+				N = (uint)i,
+				Transaction = Transaction
+			});
 		}
 	}
 
@@ -663,23 +684,36 @@ namespace NBitcoin
 			get;
 			set;
 		}
+
+		public Transaction Transaction
+		{
+			get;
+			set;
+		}
+		public Coin ToCoin()
+		{
+			return new Coin(this);
+		}
 	}
 
 	public class TxOutList : UnsignedList<TxOut>
 	{
-		public IEnumerable<TxOut> To(BitcoinAddress address)
+		public TxOutList()
 		{
-			return this.Where(r => r.IsTo(address));
-		}
 
-		public IEnumerable<TxOut> To(PubKey pubKey)
+		}
+		public TxOutList(Transaction parent)
+			: base(parent)
 		{
-			return this.Where(r => r.IsTo(pubKey));
-		}
 
-		public IEnumerable<TxOut> To(TxDestination destination)
+		}
+		public IEnumerable<TxOut> To(IDestination destination)
 		{
 			return this.Where(r => r.IsTo(destination));
+		}
+		public IEnumerable<TxOut> To(Script scriptPubKey)
+		{
+			return this.Where(r => r.ScriptPubKey == scriptPubKey);
 		}
 
 		public IEnumerable<IndexedTxOut> AsIndexedOutputs()
@@ -688,8 +722,14 @@ namespace NBitcoin
 			return this.Select((r, i) => new IndexedTxOut()
 			{
 				TxOut = r,
-				N = (uint)i
+				N = (uint)i,
+				Transaction = Transaction
 			});
+		}
+
+		public IEnumerable<Coin> AsCoins()
+		{
+			return AsIndexedOutputs().Select(i => i.ToCoin());
 		}
 
 		public IEnumerable<IndexedTxOut> AsSpendableIndexedOutputs()
@@ -721,19 +761,28 @@ namespace NBitcoin
 				nVersion = value;
 			}
 		}
-		TxInList vin = new TxInList();
-		TxOutList vout = new TxOutList();
+		TxInList vin;
+		TxOutList vout;
 		LockTime nLockTime;
 
 		public Transaction()
 		{
+			Init();
+		}
+
+		private void Init()
+		{
+			vin = new TxInList(this);
+			vout = new TxOutList(this);
 		}
 		public Transaction(string hex)
 		{
+			Init();
 			this.FromBytes(Encoders.Hex.DecodeData(hex));
 		}
 		public Transaction(byte[] bytes)
 		{
+			Init();
 			this.FromBytes(bytes);
 		}
 
@@ -778,7 +827,9 @@ namespace NBitcoin
 		{
 			stream.ReadWrite(ref nVersion);
 			stream.ReadWrite<TxInList, TxIn>(ref vin);
+			vin.Transaction = this;
 			stream.ReadWrite<TxOutList, TxOut>(ref vout);
+			vout.Transaction = this;
 			stream.ReadWriteStruct(ref nLockTime);
 		}
 
@@ -787,6 +838,18 @@ namespace NBitcoin
 		public uint256 GetHash()
 		{
 			return Hashes.Hash256(this.ToBytes());
+		}
+		public uint256 GetSignatureHash(Script scriptPubKey, int nIn, SigHash sigHash = SigHash.All)
+		{
+			return Inputs.AsIndexedInputs().ToArray()[nIn].GetSignatureHash(scriptPubKey, sigHash);
+		}
+		public TransactionSignature SignInput(ISecret secret, Script scriptPubKey, int nIn, SigHash sigHash = SigHash.All)
+		{
+			return SignInput(secret.PrivateKey, scriptPubKey, nIn, sigHash);
+		}
+		public TransactionSignature SignInput(Key key, Script scriptPubKey, int nIn, SigHash sigHash = SigHash.All)
+		{
+			return Inputs.AsIndexedInputs().ToArray()[nIn].Sign(key, scriptPubKey, sigHash);
 		}
 
 		public bool IsCoinBase
@@ -844,9 +907,9 @@ namespace NBitcoin
 		/// <para>For more complex scenario, use TransactionBuilder</para>
 		/// </summary>
 		/// <param name="secret"></param>
-		public void Sign(BitcoinSecret secret, bool assumeP2SH)
+		public void Sign(ISecret secret, bool assumeP2SH)
 		{
-			Sign(secret.Key, assumeP2SH);
+			Sign(secret.PrivateKey, assumeP2SH);
 		}
 
 		/// <summary>
@@ -898,6 +961,7 @@ namespace NBitcoin
 		{
 			return new TxPayload(this.Clone());
 		}
+
 
 		public static Transaction Parse(string tx, RawFormat format, Network network = null)
 		{

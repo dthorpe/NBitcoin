@@ -30,9 +30,16 @@ namespace NBitcoin.OpenAsset
 			Quantity = quantity;
 			Id = id;
 		}
+		public Asset(BitcoinAssetId id, ulong quantity)
+		{
+			if(id == null)
+				throw new ArgumentNullException("id");
+			Quantity = quantity;
+			Id = new AssetId(id);
+		}
 
-		public Asset(BitcoinSecret assetIssuanceKey, ulong quantity)
-			: this(new AssetId(assetIssuanceKey), quantity)
+		public Asset(IDestination issuer, ulong quantity)
+			: this(new AssetId(issuer), quantity)
 		{
 		}
 

@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if !NOSOCKET
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -43,7 +44,7 @@ namespace NBitcoin.Protocol
 			{
 				while(true)
 				{
-					var message = RecieveMessage(CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, Node._Connection.Cancel.Token).Token);
+					var message = ReceiveMessage(CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, Node._Connection.Cancel.Token).Token);
 					if(_Predicates.All(p => p(message)))
 					{
 						if(message.Message.Payload is TPayload)
@@ -82,3 +83,4 @@ namespace NBitcoin.Protocol
 		#endregion
 	}
 }
+#endif

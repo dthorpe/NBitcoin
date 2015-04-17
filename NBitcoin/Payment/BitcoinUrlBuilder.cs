@@ -2,12 +2,15 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+#if !NOPROTOBUF
 using System.Net.Http;
 using System.Net.Http.Headers;
+#endif
 using System.Text;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.NBitcoin;
+using System.Runtime.ExceptionServices;
 
 namespace NBitcoin.Payment
 {
@@ -27,7 +30,7 @@ namespace NBitcoin.Payment
 		}
 		public BitcoinUrlBuilder(string uri)
 		{
-			if(!uri.StartsWith("bitcoin:", StringComparison.InvariantCultureIgnoreCase))
+			if(!uri.StartsWith("bitcoin:", StringComparison.OrdinalIgnoreCase))
 				throw new FormatException("Invalid scheme");
 			uri = uri.Remove(0, "bitcoin:".Length);
 			if(uri.StartsWith("//"))
@@ -48,7 +51,15 @@ namespace NBitcoin.Payment
 			}
 			uri = uri.Remove(0, address.Length);
 
-			var parameters = UriHelper.DecodeQueryParameters(uri);
+			Dictionary<string, string> parameters;
+			try
+			{
+				parameters = UriHelper.DecodeQueryParameters(uri);
+			}
+			catch(ArgumentException)
+			{
+				throw new FormatException("A URI parameter is duplicated");
+			}
 			if(parameters.ContainsKey("amount"))
 			{
 				Amount = Money.Parse(parameters["amount"]);
@@ -70,7 +81,7 @@ namespace NBitcoin.Payment
 				parameters.Remove("r");
 			}
 			_UnknowParameters = parameters;
-			var reqParam = parameters.Keys.FirstOrDefault(k => k.StartsWith("req-", StringComparison.InvariantCultureIgnoreCase));
+			var reqParam = parameters.Keys.FirstOrDefault(k => k.StartsWith("req-", StringComparison.OrdinalIgnoreCase));
 			if(reqParam != null)
 				throw new FormatException("Non compatible required parameter " + reqParam);
 		}
@@ -83,7 +94,7 @@ namespace NBitcoin.Payment
 				return _UnknowParameters;
 			}
 		}
-
+#if !NOPROTOBUF
 		public PaymentRequest GetPaymentRequest()
 		{
 			if(PaymentRequestUrl == null)
@@ -92,9 +103,10 @@ namespace NBitcoin.Payment
 			{
 				return GetPaymentRequestAsync().Result;
 			}
-			catch(AggregateException ex)
+			catch(AggregateException aex)
 			{
-				throw ex.InnerException;
+				ExceptionDispatchInfo.Capture(aex.InnerException).Throw();
+				return null;
 			}
 		}
 
@@ -102,24 +114,36 @@ namespace NBitcoin.Payment
 		{
 			if(PaymentRequestUrl == null)
 				throw new InvalidOperationException("No PaymentRequestUrl specified");
+
+			bool own = false;
 			if(httpClient == null)
-				httpClient = new HttpClient();
-
-			HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Get, PaymentRequestUrl);
-			req.Headers.Clear();
-			req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(PaymentRequest.MediaType));
-
-			var result = await httpClient.SendAsync(req);
-			if(!result.IsSuccessStatusCode)
-				throw new WebException(result.StatusCode + "(" + (int)result.StatusCode + ")");
-			if(result.Content.Headers.ContentType == null || !result.Content.Headers.ContentType.MediaType.Equals(PaymentRequest.MediaType, StringComparison.InvariantCultureIgnoreCase))
 			{
-				throw new WebException("Invalid contenttype received, expecting " + PaymentRequest.MediaType + ", but got " + result.Content.Headers.ContentType);
+				httpClient = new HttpClient();
+				own = true;
 			}
-			var stream = await result.Content.ReadAsStreamAsync();
-			return PaymentRequest.Load(stream);
-		}
+			try
+			{
+				HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Get, PaymentRequestUrl);
+				req.Headers.Clear();
+				req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(PaymentRequest.MediaType));
 
+				var result = await httpClient.SendAsync(req).ConfigureAwait(false);
+				if(!result.IsSuccessStatusCode)
+					throw new WebException(result.StatusCode + "(" + (int)result.StatusCode + ")");
+				if(result.Content.Headers.ContentType == null || !result.Content.Headers.ContentType.MediaType.Equals(PaymentRequest.MediaType, StringComparison.InvariantCultureIgnoreCase))
+				{
+					throw new WebException("Invalid contenttype received, expecting " + PaymentRequest.MediaType + ", but got " + result.Content.Headers.ContentType);
+				}
+				var stream = await result.Content.ReadAsStreamAsync().ConfigureAwait(false);
+				return PaymentRequest.Load(stream);
+			}
+			finally
+			{
+				if(own)
+					httpClient.Dispose();
+			}
+		}
+#endif
 		/// <summary>
 		/// https://github.com/bitcoin/bips/blob/master/bip-0072.mediawiki
 		/// </summary>
