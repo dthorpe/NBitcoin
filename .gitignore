@@ -174,3 +174,4 @@ UpgradeLog*.htm
 FakesAssemblies/
 packages/
 .nuget/
+NBitcoin.Tests/x86/
