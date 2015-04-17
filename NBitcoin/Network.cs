@@ -553,6 +553,8 @@ namespace NBitcoin
 			name = name.ToLowerInvariant();
 			switch(name)
 			{
+				case "livenet":
+				case "mainnet":
 				case "main":
 					return Network.Main;
 				case "testnet":
