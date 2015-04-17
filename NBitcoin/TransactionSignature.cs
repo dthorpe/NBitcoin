@@ -2,6 +2,7 @@
 using NBitcoin.DataEncoders;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -33,7 +34,10 @@ namespace NBitcoin
 		public TransactionSignature(byte[] sigSigHash)
 		{
 			_Signature = ECDSASignature.FromDER(sigSigHash).MakeCanonical();
-			_SigHash = (SigHash)sigSigHash[sigSigHash.Length - 1];
+			var temp = (SigHash)sigSigHash[sigSigHash.Length - 1];
+			Debug.Assert(Enum.IsDefined(typeof(SigHash), temp & ~SigHash.AnyoneCanPay) && temp > SigHash.Undefined, 
+				"Invalid sigHash at end of signature array. Should you be calling TransactionSignature(byte[], SigHash) instead?");
+			_SigHash = temp;
 		}
 		public TransactionSignature(byte[] sig, SigHash sigHash)
 		{

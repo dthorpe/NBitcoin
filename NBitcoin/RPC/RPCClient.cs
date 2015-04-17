@@ -191,11 +191,14 @@ namespace NBitcoin.RPC
 			}
 			catch(WebException ex)
 			{
-				if(ex.Response == null)
+				if (ex.Response != null && ex.Response.ContentType == "application/json-rpc")
+				{
+					response = RPCResponse.Load(ex.Response.GetResponseStream());
+					if (throwIfRPCError)
+						response.ThrowIfError();
+				}
+				else
 					throw;
-				response = RPCResponse.Load(ex.Response.GetResponseStream());
-				if(throwIfRPCError)
-					response.ThrowIfError();
 			}
 			return response;
 		}

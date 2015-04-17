@@ -204,6 +204,12 @@ namespace NBitcoin
 			var result = PayToPubkeyHashTemplate.Instance.ExtractScriptSigParameters(ScriptSig);
 			return result != null && result.PublicKey == pubKey;
 		}
+
+		public bool IsFrom(Script redeemScript)
+		{
+			var result = PayToScriptHashTemplate.Instance.ExtractScriptSigParameters(ScriptSig);
+			return result != null && result.RedeemScript == redeemScript;
+		}
 	}
 
 	public class TxOutCompressor : IBitcoinSerializable
