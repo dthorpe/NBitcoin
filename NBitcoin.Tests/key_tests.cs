@@ -77,7 +77,7 @@ namespace NBitcoin.Tests
 				if(test.PrivateKey != null)
 				{
 					var secret = Network.Main.CreateBitcoinSecret(test.PrivateKey);
-					var signature = secret.Key.SignMessage(test.Message);
+					var signature = secret.PrivateKey.SignMessage(test.Message);
 					Assert.True(Network.Main.CreateBitcoinAddress(test.Address).VerifyMessage(test.Message, signature));
 				}
 				BitcoinAddress address = Network.Main.CreateBitcoinAddress(test.Address);
@@ -124,30 +124,30 @@ namespace NBitcoin.Tests
 			foreach(var test in tests)
 			{
 				BitcoinSecret secret = Network.Main.CreateBitcoinSecret(test.PrivateKeyWIF);
-				Assert.Equal(test.PubKey, secret.Key.PubKey.ToHex());
+				Assert.Equal(test.PubKey, secret.PrivateKey.PubKey.ToHex());
 
 				TestDERCoherence(secret);
 				TestDEREqual(test.DER, secret);
 
 				var address = Network.Main.CreateBitcoinAddress(test.Address);
-				Assert.Equal(new KeyId(test.Hash160), address.ID);
-				Assert.Equal(new KeyId(test.Hash160), secret.Key.PubKey.ID);
-				Assert.Equal(address.ID, secret.Key.PubKey.GetAddress(Network.Main).ID);
+				Assert.Equal(new KeyId(test.Hash160), address.Hash);
+				Assert.Equal(new KeyId(test.Hash160), secret.PrivateKey.PubKey.Hash);
+				Assert.Equal(address.Hash, secret.PrivateKey.PubKey.GetAddress(Network.Main).Hash);
 
 				var compressedSec = secret.Copy(true);
 				TestDERCoherence(compressedSec);
 				TestDEREqual(test.CompressedDER, compressedSec);
 
-				var a = secret.Key.PubKey;
-				var b = compressedSec.Key.PubKey;
+				var a = secret.PrivateKey.PubKey;
+				var b = compressedSec.PrivateKey.PubKey;
 
 				Assert.Equal(test.CompressedPrivateKeyWIF, compressedSec.ToWif());
-				Assert.Equal(test.CompressedPubKey, compressedSec.Key.PubKey.ToHex());
-				Assert.True(compressedSec.Key.PubKey.IsCompressed);
+				Assert.Equal(test.CompressedPubKey, compressedSec.PrivateKey.PubKey.ToHex());
+				Assert.True(compressedSec.PrivateKey.PubKey.IsCompressed);
 
 				var compressedAddr = Network.Main.CreateBitcoinAddress(test.CompressedAddress);
-				Assert.Equal(new KeyId(test.CompressedHash160), compressedAddr.ID);
-				Assert.Equal(new KeyId(test.CompressedHash160), compressedSec.Key.PubKey.ID);
+				Assert.Equal(new KeyId(test.CompressedHash160), compressedAddr.Hash);
+				Assert.Equal(new KeyId(test.CompressedHash160), compressedSec.PrivateKey.PubKey.Hash);
 
 
 			}
@@ -155,18 +155,18 @@ namespace NBitcoin.Tests
 
 		private void TestDEREqual(string expected, BitcoinSecret secret)
 		{
-			var serializedSecret = secret.Key.ToDER();
+			var serializedSecret = secret.PrivateKey.ToDER();
 			var deserializedSecret = ECKey.FromDER(serializedSecret);
 			var deserializedTestSecret = ECKey.FromDER(Encoders.Hex.DecodeData(expected));
-			AssertEx.CollectionEquals(deserializedTestSecret.ToDER(secret.Key.IsCompressed), deserializedSecret.ToDER(secret.Key.IsCompressed));
+			AssertEx.CollectionEquals(deserializedTestSecret.ToDER(secret.PrivateKey.IsCompressed), deserializedSecret.ToDER(secret.PrivateKey.IsCompressed));
 			Assert.Equal(expected, Encoders.Hex.EncodeData(serializedSecret));
 		}
 
 		private void TestDERCoherence(BitcoinSecret secret)
 		{
-			var serializedSecret = secret.Key.ToDER();
+			var serializedSecret = secret.PrivateKey.ToDER();
 			var deserializedSecret = ECKey.FromDER(serializedSecret);
-			AssertEx.CollectionEquals(secret.Key.ToDER(), deserializedSecret.ToDER(secret.Key.IsCompressed));
+			AssertEx.CollectionEquals(secret.PrivateKey.ToDER(), deserializedSecret.ToDER(secret.PrivateKey.IsCompressed));
 		}
 
 		[Fact]
@@ -179,16 +179,16 @@ namespace NBitcoin.Tests
 			BitcoinSecret bsecret2C = Network.Main.CreateBitcoinSecret(strSecret2C);
 			Assert.Throws<FormatException>(() => Network.Main.CreateBitcoinSecret(strAddressBad));
 
-			Key key1 = bsecret1.Key;
+			Key key1 = bsecret1.PrivateKey;
 			Assert.True(key1.IsCompressed == false);
-			Assert.True(bsecret1.Copy(true).Key.IsCompressed == true);
+			Assert.True(bsecret1.Copy(true).PrivateKey.IsCompressed == true);
 			Assert.True(bsecret1.Copy(true).Copy(false).IsCompressed == false);
 			Assert.True(bsecret1.Copy(true).Copy(false).ToString() == bsecret1.ToString());
-			Key key2 = bsecret2.Key;
+			Key key2 = bsecret2.PrivateKey;
 			Assert.True(key2.IsCompressed == false);
-			Key key1C = bsecret1C.Key;
+			Key key1C = bsecret1C.PrivateKey;
 			Assert.True(key1C.IsCompressed == true);
-			Key key2C = bsecret2C.Key;
+			Key key2C = bsecret2C.PrivateKey;
 			Assert.True(key1C.IsCompressed == true);
 
 			PubKey pubkey1 = key1.PubKey;
@@ -196,10 +196,10 @@ namespace NBitcoin.Tests
 			PubKey pubkey1C = key1C.PubKey;
 			PubKey pubkey2C = key2C.PubKey;
 
-			Assert.True(addr1.ID == pubkey1.ID);
-			Assert.True(addr2.ID == pubkey2.ID);
-			Assert.True(addr1C.ID == pubkey1C.ID);
-			Assert.True(addr2C.ID == pubkey2C.ID);
+			Assert.True(addr1.Hash == pubkey1.Hash);
+			Assert.True(addr2.Hash == pubkey2.Hash);
+			Assert.True(addr1C.Hash == pubkey1C.Hash);
+			Assert.True(addr2C.Hash == pubkey2C.Hash);
 
 
 
@@ -215,7 +215,7 @@ namespace NBitcoin.Tests
 
 				// normal signatures
 
-				byte[] sign1 = null, sign2 = null, sign1C = null, sign2C = null;
+				ECDSASignature sign1 = null, sign2 = null, sign1C = null, sign2C = null;
 				List<Task> tasks = new List<Task>();
 				tasks.Add(Task.Run(() => sign1 = key1.Sign(hashMsg)));
 				tasks.Add(Task.Run(() => sign2 = key2.Sign(hashMsg)));
@@ -279,5 +279,21 @@ namespace NBitcoin.Tests
 				Assert.True(rkey2C.ToHex() == pubkey2C.ToHex());
 			}
 		}
+
+
+        [Fact]
+        [Trait("Core", "Core")]
+        public void key_test_from_bytes()
+        {
+            //Example private key taken from https://en.bitcoin.it/wiki/Private_key
+            Byte[] privateKey = new Byte[32] { 0xE9, 0x87, 0x3D, 0x79, 0xC6, 0xD8, 0x7D, 0xC0, 0xFB, 0x6A, 0x57, 0x78, 0x63, 0x33, 0x89, 0xF4, 0x45, 0x32, 0x13, 0x30, 0x3D, 0xA6, 0x1F, 0x20, 0xBD, 0x67, 0xFC, 0x23, 0x3A, 0xA3, 0x32, 0x62 };
+            Key key1 = new Key(privateKey, -1, false);
+
+            ISecret wifKey = key1.GetWif(NBitcoin.Network.Main);
+
+            //Example wif private key taken from https://en.bitcoin.it/wiki/Private_key
+            const String expected = "5Kb8kLf9zgWQnogidDA76MzPL6TsZZY36hWXMssSzNydYXYB9KF";
+            Assert.True(wifKey.ToString() == expected);
+        }
 	}
 }

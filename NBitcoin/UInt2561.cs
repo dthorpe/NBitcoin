@@ -6,16 +6,30 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using NBitcoin.DataEncoders;
+using NBitcoin.Protocol;
 
 namespace NBitcoin
 {
-	public class base_uint256
+	public class uint256 : IBitcoinSerializable
 	{
+
+		public uint256()
+		{
+			for(int i = 0 ; i < WIDTH ; i++)
+				pn[i] = 0;
+		}
+
+		public uint256(uint256 b)
+		{
+			for(int i = 0 ; i < WIDTH ; i++)
+				pn[i] = b.pn[i];
+		}
+
 		protected const int WIDTH = 256 / 32;
 		protected const int WIDTH_BYTE = 256 / 8;
 		protected internal UInt32[] pn = new UInt32[WIDTH];
 
-		public void SetHex(string str)
+		internal void SetHex(string str)
 		{
 			Array.Clear(pn, 0, pn.Length);
 			str = str.TrimStart();
@@ -47,7 +61,7 @@ namespace NBitcoin
 				}
 			}
 		}
-		protected void SetByte(int index, byte value)
+		internal void SetByte(int index, byte value)
 		{
 			var uintIndex = index / sizeof(uint);
 			var byteIndex = index % sizeof(uint);
@@ -60,17 +74,30 @@ namespace NBitcoin
 			pn[uintIndex] = currentValue;
 		}
 
-		public string GetHex()
+		private static readonly uint[] _lookup32 = CreateLookup32();
+		private static uint[] CreateLookup32()
 		{
-			StringBuilder builder = new StringBuilder();
-			for(int i = 0 ; i < WIDTH_BYTE; i++)
+			var result = new uint[256];
+			for(int i = 0 ; i < 256 ; i++)
 			{
-				var b = GetByte(WIDTH_BYTE - i - 1);
-				builder.Append(b.ToString("x2"));
+				string s = i.ToString("x2");
+				result[i] = ((uint)s[0]) + ((uint)s[1] << 16);
 			}
-			return builder.ToString();
+			return result;
 		}
-		
+		internal string GetHex()
+		{
+			var lookup32 = _lookup32;
+			var result = new char[WIDTH_BYTE * 2];
+			for(int i = 0 ; i < WIDTH_BYTE ; i++)
+			{
+				var val = lookup32[GetByte(WIDTH_BYTE - i - 1)];
+				result[2 * i] = (char)val;
+				result[2 * i + 1] = (char)(val >> 16);
+			}
+			return new string(result);
+		}
+
 		public byte GetByte(int index)
 		{
 			var uintIndex = index / sizeof(uint);
@@ -84,35 +111,12 @@ namespace NBitcoin
 			return GetHex();
 		}
 
-	}
-	public class uint256 : base_uint256,  IBitcoinSerializable
-	{
-
-		public uint256()
-		{
-			for(int i = 0 ; i < WIDTH ; i++)
-				pn[i] = 0;
-		}
-
-		public uint256(base_uint256 b)
-		{
-			for(int i = 0 ; i < WIDTH ; i++)
-				pn[i] = b.pn[i];
-		}
-
-		//uint256 operator=(base_uint256& b)
-		//{
-		//	for (int i = 0; i < WIDTH; i++)
-		//		pn[i] = b.pn[i];
-		//	return  *this;
-		//}
-
 
 		public uint256(ulong b)
 		{
 			pn[0] = (uint)b;
 			pn[1] = (uint)(b >> 32);
-			for (int i = 2; i < WIDTH; i++)
+			for(int i = 2 ; i < WIDTH ; i++)
 				pn[i] = 0;
 		}
 		public uint256(byte[] vch, bool lendian = true)
@@ -206,11 +210,11 @@ namespace NBitcoin
 
 		private static int Comparison(uint256 a, uint256 b)
 		{
-			 for (int i = WIDTH-1; i >= 0; i--)
+			for(int i = WIDTH - 1 ; i >= 0 ; i--)
 			{
-				if (a.pn[i] < b.pn[i])
+				if(a.pn[i] < b.pn[i])
 					return -1;
-				else if (a.pn[i] > b.pn[i])
+				else if(a.pn[i] > b.pn[i])
 					return 1;
 			}
 			return 0;
@@ -240,43 +244,43 @@ namespace NBitcoin
 			return c;
 		}
 
-		public static bool operator!(uint256 a)
-	    {
-	     for (int i = 0; i < WIDTH; i++)
-	         if (a.pn[i] != 0)
-	             return false;
-	     return true;
-	   }
+		public static bool operator !(uint256 a)
+		{
+			for(int i = 0 ; i < WIDTH ; i++)
+				if(a.pn[i] != 0)
+					return false;
+			return true;
+		}
 
-	    public static uint256 operator-(uint256 a, uint256 b)
-    {
-		return a + (-b);
-    }
+		public static uint256 operator -(uint256 a, uint256 b)
+		{
+			return a + (-b);
+		}
 
-	   public static uint256 operator+(uint256 a, uint256 b)
-    {
-		var result = new uint256();
-        ulong carry = 0;
-        for (int i = 0; i < WIDTH; i++)
-        {
-            ulong n = carry + a.pn[i] + b.pn[i];
-            result.pn[i] = (uint)(n & 0xffffffff);
-            carry = n >> 32;
-        }
-        return result;
-    }
+		public static uint256 operator +(uint256 a, uint256 b)
+		{
+			var result = new uint256();
+			ulong carry = 0;
+			for(int i = 0 ; i < WIDTH ; i++)
+			{
+				ulong n = carry + a.pn[i] + b.pn[i];
+				result.pn[i] = (uint)(n & 0xffffffff);
+				carry = n >> 32;
+			}
+			return result;
+		}
 
-	public static uint256 operator+(uint256 a, ulong b)
-    {
-		return a + new uint256(b);
-    }
+		public static uint256 operator +(uint256 a, ulong b)
+		{
+			return a + new uint256(b);
+		}
 
-	
 
-	public static implicit operator uint256(ulong value)
-	{
-		return new uint256(value);
-	}
+
+		public static implicit operator uint256(ulong value)
+		{
+			return new uint256(value);
+		}
 
 		public static uint256 operator &(uint256 a, uint256 b)
 		{
@@ -322,7 +326,7 @@ namespace NBitcoin
 			return result;
 		}
 
-		
+
 		public static uint256 operator ~(uint256 a)
 		{
 			var b = new uint256();
@@ -343,7 +347,7 @@ namespace NBitcoin
 			return b;
 		}
 
-		 public static uint256 operator ++(uint256 a)
+		public static uint256 operator ++(uint256 a)
 		{
 			var ret = new uint256(a);
 			return a + new uint256(1);
@@ -352,18 +356,18 @@ namespace NBitcoin
 		{
 			return a - 1;
 		}
-		
+
 		public byte[] ToBytes(bool lendian = true)
-{
-	var copy = new byte[WIDTH_BYTE];
-	for(int i = 0 ; i < WIDTH_BYTE ; i++)
-	{
-		copy[i] = GetByte(i);
-	}
-	if(!lendian)
-		Array.Reverse(copy);
-	return copy;
-}
+		{
+			var copy = new byte[WIDTH_BYTE];
+			for(int i = 0 ; i < WIDTH_BYTE ; i++)
+			{
+				copy[i] = GetByte(i);
+			}
+			if(!lendian)
+				Array.Reverse(copy);
+			return copy;
+		}
 
 		public void ReadWrite(BitcoinStream stream)
 		{
@@ -395,12 +399,12 @@ namespace NBitcoin
 				var b = stream.ReadByte();
 				if(b != -1)
 				{
-					SetByte(i,(byte)b);
+					SetByte(i, (byte)b);
 				}
 			}
 		}
 
-		public int GetSerializeSize(int nType=0, ProtocolVersion protocolVersion = ProtocolVersion.PROTOCOL_VERSION)
+		public int GetSerializeSize(int nType = 0, ProtocolVersion protocolVersion = ProtocolVersion.PROTOCOL_VERSION)
 		{
 			return WIDTH_BYTE;
 		}
@@ -447,13 +451,27 @@ namespace NBitcoin
 			}
 		}
 	}
-	public class base_uint160
+
+	public class uint160 : IBitcoinSerializable
 	{
+
+		public uint160()
+		{
+			for(int i = 0 ; i < WIDTH ; i++)
+				pn[i] = 0;
+		}
+
+		public uint160(uint160 b)
+		{
+			for(int i = 0 ; i < WIDTH ; i++)
+				pn[i] = b.pn[i];
+		}
+
 		protected const int WIDTH = 160 / 32;
 		protected const int WIDTH_BYTE = 160 / 8;
 		protected internal UInt32[] pn = new UInt32[WIDTH];
 
-		public void SetHex(string str)
+		internal void SetHex(string str)
 		{
 			Array.Clear(pn, 0, pn.Length);
 			str = str.TrimStart();
@@ -485,7 +503,7 @@ namespace NBitcoin
 				}
 			}
 		}
-		protected void SetByte(int index, byte value)
+		internal void SetByte(int index, byte value)
 		{
 			var uintIndex = index / sizeof(uint);
 			var byteIndex = index % sizeof(uint);
@@ -498,17 +516,30 @@ namespace NBitcoin
 			pn[uintIndex] = currentValue;
 		}
 
-		public string GetHex()
+		private static readonly uint[] _lookup32 = CreateLookup32();
+		private static uint[] CreateLookup32()
 		{
-			StringBuilder builder = new StringBuilder();
-			for(int i = 0 ; i < WIDTH_BYTE; i++)
+			var result = new uint[256];
+			for(int i = 0 ; i < 256 ; i++)
 			{
-				var b = GetByte(WIDTH_BYTE - i - 1);
-				builder.Append(b.ToString("x2"));
+				string s = i.ToString("x2");
+				result[i] = ((uint)s[0]) + ((uint)s[1] << 16);
 			}
-			return builder.ToString();
+			return result;
 		}
-		
+		internal string GetHex()
+		{
+			var lookup32 = _lookup32;
+			var result = new char[WIDTH_BYTE * 2];
+			for(int i = 0 ; i < WIDTH_BYTE ; i++)
+			{
+				var val = lookup32[GetByte(WIDTH_BYTE - i - 1)];
+				result[2 * i] = (char)val;
+				result[2 * i + 1] = (char)(val >> 16);
+			}
+			return new string(result);
+		}
+
 		public byte GetByte(int index)
 		{
 			var uintIndex = index / sizeof(uint);
@@ -522,35 +553,12 @@ namespace NBitcoin
 			return GetHex();
 		}
 
-	}
-	public class uint160 : base_uint160,  IBitcoinSerializable
-	{
-
-		public uint160()
-		{
-			for(int i = 0 ; i < WIDTH ; i++)
-				pn[i] = 0;
-		}
-
-		public uint160(base_uint160 b)
-		{
-			for(int i = 0 ; i < WIDTH ; i++)
-				pn[i] = b.pn[i];
-		}
-
-		//uint256 operator=(base_uint160& b)
-		//{
-		//	for (int i = 0; i < WIDTH; i++)
-		//		pn[i] = b.pn[i];
-		//	return  *this;
-		//}
-
 
 		public uint160(ulong b)
 		{
 			pn[0] = (uint)b;
 			pn[1] = (uint)(b >> 32);
-			for (int i = 2; i < WIDTH; i++)
+			for(int i = 2 ; i < WIDTH ; i++)
 				pn[i] = 0;
 		}
 		public uint160(byte[] vch, bool lendian = true)
@@ -644,11 +652,11 @@ namespace NBitcoin
 
 		private static int Comparison(uint160 a, uint160 b)
 		{
-			 for (int i = WIDTH-1; i >= 0; i--)
+			for(int i = WIDTH - 1 ; i >= 0 ; i--)
 			{
-				if (a.pn[i] < b.pn[i])
+				if(a.pn[i] < b.pn[i])
 					return -1;
-				else if (a.pn[i] > b.pn[i])
+				else if(a.pn[i] > b.pn[i])
 					return 1;
 			}
 			return 0;
@@ -678,43 +686,43 @@ namespace NBitcoin
 			return c;
 		}
 
-		public static bool operator!(uint160 a)
-	    {
-	     for (int i = 0; i < WIDTH; i++)
-	         if (a.pn[i] != 0)
-	             return false;
-	     return true;
-	   }
+		public static bool operator !(uint160 a)
+		{
+			for(int i = 0 ; i < WIDTH ; i++)
+				if(a.pn[i] != 0)
+					return false;
+			return true;
+		}
 
-	    public static uint160 operator-(uint160 a, uint160 b)
-    {
-		return a + (-b);
-    }
+		public static uint160 operator -(uint160 a, uint160 b)
+		{
+			return a + (-b);
+		}
 
-	   public static uint160 operator+(uint160 a, uint160 b)
-    {
-		var result = new uint160();
-        ulong carry = 0;
-        for (int i = 0; i < WIDTH; i++)
-        {
-            ulong n = carry + a.pn[i] + b.pn[i];
-            result.pn[i] = (uint)(n & 0xffffffff);
-            carry = n >> 32;
-        }
-        return result;
-    }
+		public static uint160 operator +(uint160 a, uint160 b)
+		{
+			var result = new uint160();
+			ulong carry = 0;
+			for(int i = 0 ; i < WIDTH ; i++)
+			{
+				ulong n = carry + a.pn[i] + b.pn[i];
+				result.pn[i] = (uint)(n & 0xffffffff);
+				carry = n >> 32;
+			}
+			return result;
+		}
 
-	public static uint160 operator+(uint160 a, ulong b)
-    {
-		return a + new uint160(b);
-    }
+		public static uint160 operator +(uint160 a, ulong b)
+		{
+			return a + new uint160(b);
+		}
 
-	
 
-	public static implicit operator uint160(ulong value)
-	{
-		return new uint160(value);
-	}
+
+		public static implicit operator uint160(ulong value)
+		{
+			return new uint160(value);
+		}
 
 		public static uint160 operator &(uint160 a, uint160 b)
 		{
@@ -760,7 +768,7 @@ namespace NBitcoin
 			return result;
 		}
 
-		
+
 		public static uint160 operator ~(uint160 a)
 		{
 			var b = new uint160();
@@ -781,7 +789,7 @@ namespace NBitcoin
 			return b;
 		}
 
-		 public static uint160 operator ++(uint160 a)
+		public static uint160 operator ++(uint160 a)
 		{
 			var ret = new uint160(a);
 			return a + new uint160(1);
@@ -790,18 +798,18 @@ namespace NBitcoin
 		{
 			return a - 1;
 		}
-		
+
 		public byte[] ToBytes(bool lendian = true)
-{
-	var copy = new byte[WIDTH_BYTE];
-	for(int i = 0 ; i < WIDTH_BYTE ; i++)
-	{
-		copy[i] = GetByte(i);
-	}
-	if(!lendian)
-		Array.Reverse(copy);
-	return copy;
-}
+		{
+			var copy = new byte[WIDTH_BYTE];
+			for(int i = 0 ; i < WIDTH_BYTE ; i++)
+			{
+				copy[i] = GetByte(i);
+			}
+			if(!lendian)
+				Array.Reverse(copy);
+			return copy;
+		}
 
 		public void ReadWrite(BitcoinStream stream)
 		{
@@ -833,12 +841,12 @@ namespace NBitcoin
 				var b = stream.ReadByte();
 				if(b != -1)
 				{
-					SetByte(i,(byte)b);
+					SetByte(i, (byte)b);
 				}
 			}
 		}
 
-		public int GetSerializeSize(int nType=0, ProtocolVersion protocolVersion = ProtocolVersion.PROTOCOL_VERSION)
+		public int GetSerializeSize(int nType = 0, ProtocolVersion protocolVersion = ProtocolVersion.PROTOCOL_VERSION)
 		{
 			return WIDTH_BYTE;
 		}

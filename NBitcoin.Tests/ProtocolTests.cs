@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if !NOSOCKET
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -238,7 +239,7 @@ namespace NBitcoin.Tests
 				toS2.VersionHandshake();
 				var ping = new PingPayload();
 				toS2.SendMessage(ping);
-				var pong = toS2.RecieveMessage<PongPayload>(TimeSpan.FromSeconds(10.0));
+				var pong = toS2.ReceiveMessage<PongPayload>(TimeSpan.FromSeconds(10.0));
 				Assert.Equal(ping.Nonce, pong.Nonce);
 			}
 		}
@@ -264,7 +265,7 @@ namespace NBitcoin.Tests
 			using(var tester = new NodeServerTester())
 			{
 				int nodeCount = 0;
-				tester.Server1.NodeAdded += (s,a)=> nodeCount++;
+				tester.Server1.NodeAdded += (s, a) => nodeCount++;
 				tester.Server1.NodeRemoved += (s, a) => nodeCount--;
 
 				var n1 = Node.Connect(tester.Server1.Network, tester.Server1.ExternalEndpoint);
@@ -290,6 +291,21 @@ namespace NBitcoin.Tests
 
 
 		[Fact]
+		[Trait("UnitTest", "UnitTest")]
+		public void CanParseReject()
+		{
+			var hex = "f9beb4d972656a6563740000000000003a000000db7f7e7802747812156261642d74786e732d696e707574732d7370656e74577a9694da4ff41ae999f6591cff3749ad6a7db19435f3d8af5fecbcff824196";
+			Message message = new Message();
+			message.ReadWrite(Encoders.Hex.DecodeData(hex));
+			var reject = (RejectPayload)message.Payload;
+			Assert.True(reject.Message == "tx");
+			Assert.True(reject.Code == RejectCode.DUPLICATE);
+			Assert.True(reject.CodeType == RejectCodeType.Transaction);
+			Assert.True(reject.Reason == "bad-txns-inputs-spent");
+			Assert.True(reject.Hash == new uint256("964182ffbcec5fafd8f33594b17d6aad4937ff1c59f699e91af44fda94967a57"));
+		}
+
+		[Fact]
 		[Trait("NodeServer", "NodeServer")]
 		public void CanDownloadBlock()
 		{
@@ -302,7 +318,7 @@ namespace NBitcoin.Tests
 							Type = InventoryType.MSG_BLOCK
 						}));
 
-				var block = node.RecieveMessage<BlockPayload>();
+				var block = node.ReceiveMessage<BlockPayload>();
 				Assert.True(block.Object.CheckMerkleRoot());
 			}
 		}
@@ -406,6 +422,7 @@ namespace NBitcoin.Tests
 			}
 		}
 
+
 		PeerTableRepository _PeerCache;
 		public PeerTableRepository PeerCache
 		{
@@ -416,5 +433,7 @@ namespace NBitcoin.Tests
 				return _PeerCache;
 			}
 		}
+
 	}
 }
+#endif

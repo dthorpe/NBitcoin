@@ -34,9 +34,9 @@ namespace NBitcoin
 			SetData(rawBytes);
 		}
 
-		public static Base58Data GetFromBase58Data(string base58)
+		public static Base58Data GetFromBase58Data(string base58, Network expectedNetwork = null)
 		{
-			return Network.CreateFromBase58Data(base58);
+			return Network.CreateFromBase58Data(base58, expectedNetwork);
 		}
 
 		private void SetString(string psz)

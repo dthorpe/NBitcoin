@@ -21,15 +21,15 @@ namespace NBitcoin
 	}
 	public interface ICoin
 	{
+		Money Amount
+		{
+			get;
+		}
 		OutPoint Outpoint
 		{
 			get;
 		}
-		Script ScriptPubKey
-		{
-			get;
-		}
-		Money Amount
+		TxOut TxOut
 		{
 			get;
 		}
@@ -56,11 +56,15 @@ namespace NBitcoin
 		{
 			get
 			{
-				return Bearer.TxOut.ScriptPubKey.ID.ToAssetId();
+				return Bearer.TxOut.ScriptPubKey.Hash.ToAssetId();
 			}
 		}
 
-
+		public Uri DefinitionUrl
+		{
+			get;
+			set;
+		}
 
 		#region ICoin Members
 
@@ -74,6 +78,14 @@ namespace NBitcoin
 			set
 			{
 				Bearer.TxOut.Value = value;
+			}
+		}
+
+		public TxOut TxOut
+		{
+			get
+			{
+				return Bearer.TxOut;
 			}
 		}
 
@@ -143,6 +155,15 @@ namespace NBitcoin
 			get;
 			set;
 		}
+
+		public TxOut TxOut
+		{
+			get
+			{
+				return Bearer.TxOut;
+			}
+		}
+
 		#region ICoin Members
 
 		public OutPoint Outpoint
@@ -177,6 +198,10 @@ namespace NBitcoin
 		}
 		public static IEnumerable<ColoredCoin> Find(uint256 txId, Transaction tx, ColoredTransaction colored)
 		{
+			if(colored == null)
+				throw new ArgumentNullException("colored");
+			if(tx == null)
+				throw new ArgumentNullException("tx");
 			if(txId == null)
 				txId = tx.GetHash();
 			foreach(var entry in colored.Issuances.Concat(colored.Transfers))
@@ -215,11 +240,11 @@ namespace NBitcoin
 			TxOut = fromTxOut;
 		}
 
-        public Coin(Transaction fromTx, uint fromOutputIndex)
-        {
-            Outpoint = new OutPoint(fromTx, fromOutputIndex);
-            TxOut = fromTx.Outputs[fromOutputIndex];
-        }
+		public Coin(Transaction fromTx, uint fromOutputIndex)
+		{
+			Outpoint = new OutPoint(fromTx, fromOutputIndex);
+			TxOut = fromTx.Outputs[fromOutputIndex];
+		}
 
 		public Coin(Transaction fromTx, TxOut fromOutput)
 		{
@@ -227,12 +252,39 @@ namespace NBitcoin
 			Outpoint = new OutPoint(fromTx, outputIndex);
 			TxOut = fromOutput;
 		}
+		public Coin(IndexedTxOut txOut)
+		{
+			Outpoint = new OutPoint(txOut.Transaction.GetHash(), txOut.N);
+			TxOut = txOut.TxOut;
+		}
 
-        public Coin(uint256 fromTxHash, uint fromOutputIndex, Money amount, Script scriptPubKey)
-        {
-            Outpoint = new OutPoint(fromTxHash, fromOutputIndex);
-            TxOut = new TxOut(amount, scriptPubKey);
-        }
+		public Coin(uint256 fromTxHash, uint fromOutputIndex, Money amount, Script scriptPubKey)
+		{
+			Outpoint = new OutPoint(fromTxHash, fromOutputIndex);
+			TxOut = new TxOut(amount, scriptPubKey);
+		}
+
+		public ScriptCoin ToScriptCoin(Script redeemScript)
+		{
+			if(redeemScript == null)
+				throw new ArgumentNullException("redeemScript");
+			if(this is ScriptCoin)
+				return (ScriptCoin)this;
+			return new ScriptCoin(this, redeemScript);
+		}
+
+		public ColoredCoin ToColoredCoin(AssetId asset, ulong quantity)
+		{
+			return ToColoredCoin(new Asset(asset, quantity));
+		}
+		public ColoredCoin ToColoredCoin(BitcoinAssetId asset, ulong quantity)
+		{
+			return ToColoredCoin(new Asset(asset, quantity));
+		}
+		public ColoredCoin ToColoredCoin(Asset asset)
+		{
+			return new ColoredCoin(asset, this);
+		}
 
 		public OutPoint Outpoint
 		{
@@ -290,24 +342,51 @@ namespace NBitcoin
 			: base(fromOutpoint, fromTxOut)
 		{
 			Redeem = redeem;
+			AssertCoherent();
 		}
 
 		public ScriptCoin(Transaction fromTx, uint fromOutputIndex, Script redeem)
-			:base(fromTx, fromOutputIndex)
+			: base(fromTx, fromOutputIndex)
 		{
 			Redeem = redeem;
+			AssertCoherent();
 		}
 
 		public ScriptCoin(Transaction fromTx, TxOut fromOutput, Script redeem)
 			: base(fromTx, fromOutput)
 		{
 			Redeem = redeem;
+			AssertCoherent();
 		}
-
-        public ScriptCoin(uint256 txHash, uint outputIndex, Money amount, Script redeem)
-			: base(txHash, outputIndex, amount, redeem.ID.CreateScriptPubKey())
+		public ScriptCoin(Coin coin, Script redeem)
+			: base(coin.Outpoint, coin.TxOut)
 		{
 			Redeem = redeem;
+			AssertCoherent();
+		}
+
+		private void AssertCoherent()
+		{
+			if(Redeem == null)
+				throw new ArgumentException("redeem cannot be null", "redeem");
+			var destination = TxOut.ScriptPubKey.GetDestination() as ScriptId;
+			if(destination == null)
+				throw new ArgumentException("the provided scriptPubKey is not P2SH");
+			if(destination.ScriptPubKey != Redeem.Hash.ScriptPubKey)
+				throw new ArgumentException("The redeem provided does not match the scriptPubKey of the coin");
+		}
+		public ScriptCoin(IndexedTxOut txOut, Script redeem)
+			: base(txOut)
+		{
+			Redeem = redeem;
+			AssertCoherent();
+		}
+
+		public ScriptCoin(uint256 txHash, uint outputIndex, Money amount, Script redeem)
+			: base(txHash, outputIndex, amount, redeem.Hash.ScriptPubKey)
+		{
+			Redeem = redeem;
+			AssertCoherent();
 		}
 
 		public Script Redeem

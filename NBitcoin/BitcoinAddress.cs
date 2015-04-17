@@ -21,7 +21,16 @@ namespace NBitcoin
 		{
 		}
 
+		[Obsolete("Use Hash instead")]
 		public override TxDestination ID
+		{
+			get
+			{
+				return Hash;
+			}
+		}
+
+		public override TxDestination Hash
 		{
 			get
 			{
@@ -40,15 +49,16 @@ namespace NBitcoin
 
 		protected override Script GeneratePaymentScript()
 		{
-			return PayToScriptHashTemplate.Instance.GenerateScriptPubKey((ScriptId)ID);
+			return PayToScriptHashTemplate.Instance.GenerateScriptPubKey((ScriptId)Hash);
 		}
 	}
-	public class BitcoinAddress : Base58Data
+	public class BitcoinAddress : Base58Data, IDestination
 	{
 		public static BitcoinAddress Create(string base58, Network expectedNetwork = null)
 		{
 			return Network.CreateFromBase58Data<BitcoinAddress>(base58, expectedNetwork);
 		}
+
 		public BitcoinAddress(string base58, Network expectedNetwork = null)
 			: base(base58, expectedNetwork)
 		{
@@ -72,6 +82,7 @@ namespace NBitcoin
 			}
 		}
 
+		[Obsolete("Use Hash instead")]
 		public virtual TxDestination ID
 		{
 			get
@@ -79,39 +90,56 @@ namespace NBitcoin
 				return new KeyId(vchData);
 			}
 		}
+		public virtual TxDestination Hash
+		{
+			get
+			{
+				return new KeyId(vchData);
+			}
+		}
 
-		Script _PaymentScript;
+		[Obsolete("Use ScriptPubKey instead")]
 		public Script PaymentScript
 		{
 			get
 			{
-				if(_PaymentScript == null)
-				{
-					_PaymentScript = GeneratePaymentScript();
-				}
-				return _PaymentScript;
+				return ScriptPubKey;
 			}
 		}
+
+		Script _ScriptPubKey;
+		public Script ScriptPubKey
+		{
+			get
+			{
+				if(_ScriptPubKey == null)
+				{
+					_ScriptPubKey = GeneratePaymentScript();
+				}
+				return _ScriptPubKey;
+			}
+		}
+
 
 		public BitcoinScriptAddress GetScriptAddress()
 		{
 			if(this is BitcoinScriptAddress)
 				return (BitcoinScriptAddress)this;
 			var redeem = PayToPubkeyHashTemplate.Instance.GenerateScriptPubKey(this);
-			return new BitcoinScriptAddress(redeem.ID, Network);
+			return new BitcoinScriptAddress(redeem.Hash, Network);
 		}
-		
+
 
 
 		protected virtual Script GeneratePaymentScript()
 		{
-			return PayToPubkeyHashTemplate.Instance.GenerateScriptPubKey((KeyId)this.ID);
+			return PayToPubkeyHashTemplate.Instance.GenerateScriptPubKey((KeyId)this.Hash);
 		}
 
 		public bool VerifyMessage(string message, string signature)
 		{
 			var key = PubKey.RecoverFromMessage(message, signature);
-			return key.ID == ID;
+			return key.Hash == Hash;
 		}
 
 		public override Base58Type Type
@@ -134,6 +162,11 @@ namespace NBitcoin
 				return new BitcoinScriptAddress((ScriptId)id, network);
 			else
 				throw new NotSupportedException();
+		}
+
+		public BitcoinColoredAddress ToColoredAddress()
+		{
+			return new BitcoinColoredAddress(this);
 		}
 	}
 }

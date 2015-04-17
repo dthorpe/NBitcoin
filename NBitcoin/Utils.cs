@@ -1,5 +1,4 @@
 ﻿using NBitcoin.DataEncoders;
-using NBitcoin.Protocol;
 using NBitcoin.BouncyCastle.Crypto.Digests;
 using System;
 using System.Collections.Generic;
@@ -7,20 +6,60 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Security;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using NBitcoin.Protocol;
+using System.Runtime.ExceptionServices;
+#if !PORTABLE
+using System.Security.Cryptography;
+using System.Net.Sockets;
+#endif
 
 namespace NBitcoin
 {
 	public static class Extensions
 	{
+		public static Block GetBlock(this IBlockRepository repository, uint256 blockId)
+		{
+			try
+			{
+				return repository.GetBlockAsync(blockId).Result;
+			}
+			catch(AggregateException aex)
+			{
+				ExceptionDispatchInfo.Capture(aex.InnerException).Throw();
+				return null; //Can't happen
+			}
+		}
+
+
+		public static T ToNetwork<T>(this T base58, Network network) where T : Base58Data
+		{
+			if(network == null)
+				throw new ArgumentNullException("network");
+			if(base58.Network == network)
+				return base58;
+			if(base58 == null)
+				throw new ArgumentNullException("base58");
+			var inner = base58.ToBytes();
+			if(base58.Type != Base58Type.COLORED_ADDRESS)
+			{
+				byte[] version = network.GetVersionBytes(base58.Type);
+				var newBase58 = Encoders.Base58Check.EncodeData(version.Concat(inner).ToArray());
+				return Network.CreateFromBase58Data<T>(newBase58, network);
+			}
+			else
+			{
+				var colored = BitcoinColoredAddress.GetWrappedBase58(base58.ToWif(), base58.Network);
+				var address = Network.CreateFromBase58Data<BitcoinAddress>(colored).ToNetwork(network);
+				return (T)(object)address.ToColoredAddress();
+			}
+		}
 		public static byte[] ReadBytes(this Stream stream, int count)
 		{
 			byte[] result = new byte[count];
@@ -69,8 +108,7 @@ namespace NBitcoin
 			}
 		}
 
-
-
+#if !PORTABLE
 		public static int ReadEx(this Stream stream, byte[] buffer, int offset, int count, CancellationToken cancellation = default(CancellationToken))
 		{
 			int readen = 0;
@@ -107,6 +145,30 @@ namespace NBitcoin
 			}
 			return readen;
 		}
+#else
+
+		public static int ReadEx(this Stream stream, byte[] buffer, int offset, int count, CancellationToken cancellation = default(CancellationToken))
+		{
+			int readen = 0;
+			while(readen < count)
+			{
+				int thisRead = 0;
+
+				cancellation.ThrowIfCancellationRequested();
+				thisRead = stream.Read(buffer, offset + readen, count - readen);
+
+				if(thisRead == -1)
+					return -1;
+				if(thisRead == 0 && (stream is MemoryStream))
+				{
+					if(stream.Length == stream.Position)
+						return -1;
+				}
+				readen += thisRead;
+			}
+			return readen;
+		}
+#endif
 		public static void AddOrReplace<TKey, TValue>(this IDictionary<TKey, TValue> dico, TKey key, TValue value)
 		{
 			if(dico.ContainsKey(key))
@@ -233,9 +295,12 @@ namespace NBitcoin
 
 
 
-
+#if !NOBIGINT
 		//https://en.bitcoin.it/wiki/Script
 		public static byte[] BigIntegerToBytes(BigInteger num)
+#else
+		internal static byte[] BigIntegerToBytes(BigInteger num)
+#endif
 		{
 			if(num == 0)
 				//Positive 0 is represented by a null-length vector
@@ -253,7 +318,11 @@ namespace NBitcoin
 			return array;
 		}
 
+#if !NOBIGINT
 		public static BigInteger BytesToBigInteger(byte[] data)
+#else
+		internal static BigInteger BytesToBigInteger(byte[] data)
+#endif
 		{
 			if(data == null)
 				throw new ArgumentNullException("data");
@@ -355,7 +424,7 @@ namespace NBitcoin
 		}
 
 
-
+#if !PORTABLE
 		internal static void SafeCloseSocket(System.Net.Sockets.Socket socket)
 		{
 			try
@@ -381,27 +450,7 @@ namespace NBitcoin
 				return endpoint;
 			return new IPEndPoint(endpoint.Address.MapToIPv6(), endpoint.Port);
 		}
-
-		public static string Serialize<T>(T obj)
-		{
-			DataContractSerializer seria = new DataContractSerializer(typeof(T));
-			MemoryStream ms = new MemoryStream();
-			seria.WriteObject(ms, obj);
-			ms.Position = 0;
-			return new StreamReader(ms).ReadToEnd();
-		}
-
-		public static T Deserialize<T>(string str)
-		{
-			DataContractSerializer seria = new DataContractSerializer(typeof(T));
-			MemoryStream ms = new MemoryStream();
-			StreamWriter writer = new StreamWriter(ms);
-			writer.Write(str);
-			writer.Flush();
-			ms.Position = 0;
-			return (T)seria.ReadObject(ms);
-		}
-
+#endif
 		internal static byte[] ToBytes(uint value, bool littleEndian)
 		{
 			if(littleEndian)
@@ -446,7 +495,7 @@ namespace NBitcoin
 		}
 
 
-
+#if !PORTABLE
 		public static IPEndPoint ParseIpEndpoint(string endpoint, int defaultPort)
 		{
 			var splitted = endpoint.Split(':');
@@ -462,7 +511,7 @@ namespace NBitcoin
 			}
 			return new IPEndPoint(address, port);
 		}
-
+#endif
 		public static int GetHashCode(byte[] array)
 		{
 			unchecked

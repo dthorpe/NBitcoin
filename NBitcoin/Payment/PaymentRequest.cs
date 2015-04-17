@@ -1,4 +1,5 @@
-﻿using NBitcoin.Crypto;
+﻿#if !USEBC
+using NBitcoin.Crypto;
 using ProtoBuf;
 using ProtoBuf.Meta;
 using System;
@@ -33,6 +34,12 @@ namespace NBitcoin.Payment
 			Amount = amount;
 			Script = script;
 		}
+		public PaymentOutput(Money amount, IDestination destination)
+		{
+			Amount = amount;
+			if(destination != null)
+				Script = destination.ScriptPubKey;
+		}
 		internal PaymentOutput(Proto.Output output)
 		{
 			Amount = new Money(output.amount);
@@ -59,7 +66,7 @@ namespace NBitcoin.Payment
 		{
 			var data = OriginalData == null ? new Proto.Output() : (Proto.Output)PaymentRequest.Serializer.DeepClone(OriginalData);
 			data.amount = (ulong)Amount.Satoshi;
-			data.script = Script.ToRawScript();
+			data.script = Script.ToBytes();
 			return data;
 		}
 	}
@@ -330,6 +337,9 @@ namespace NBitcoin.Payment
 			set;
 		}
 
+		/// <summary>
+		/// Get the merchant name from the certificate subject
+		/// </summary>
 		public string MerchantName
 		{
 			get
@@ -388,6 +398,10 @@ namespace NBitcoin.Payment
 			set;
 		}
 
+		/// <summary>
+		/// Verify that the certificate chain is trusted and signature correct.
+		/// </summary>
+		/// <returns>true if the certificate chain and the signature is trusted or if PKIType == None</returns>
 		public bool Verify()
 		{
 			bool valid = true;
@@ -492,3 +506,4 @@ namespace NBitcoin.Payment
 		public readonly static string MediaType = "application/bitcoin-paymentrequest";
 	}
 }
+#endif

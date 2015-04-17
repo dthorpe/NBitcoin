@@ -49,7 +49,7 @@ namespace NBitcoin.Stealth
 			if(address.SignatureCount > 1)
 			{
 				Redeem = ScriptPubKey;
-				ScriptPubKey = ScriptPubKey.ID.CreateScriptPubKey();
+				ScriptPubKey = ScriptPubKey.Hash.ScriptPubKey;
 			}
 			SetStealthKeys();
 		}
@@ -63,7 +63,7 @@ namespace NBitcoin.Stealth
 		{
 			if(sigCount == 1 && uncoveredPubKeys.Length == 1)
 			{
-				return PayToPubkeyHashTemplate.Instance.GenerateScriptPubKey(uncoveredPubKeys[0].ID);
+				return PayToPubkeyHashTemplate.Instance.GenerateScriptPubKey(uncoveredPubKeys[0].Hash);
 			}
 			else
 			{
@@ -89,7 +89,7 @@ namespace NBitcoin.Stealth
 				var para = PayToMultiSigTemplate.Instance.ExtractScriptPubKeyParameters(script);
 				if(para == null)
 					throw new ArgumentException("Invalid stealth spendable output script", "spendable");
-				return para.PubKeys.Select(k => k.ID).ToArray();
+				return para.PubKeys.Select(k => k.Hash).ToArray();
 			}
 		}
 
@@ -135,6 +135,10 @@ namespace NBitcoin.Stealth
 
 		public void AddToTransaction(Transaction transaction, Money value)
 		{
+			if(transaction == null)
+				throw new ArgumentNullException("transaction");
+			if(value == null)
+				throw new ArgumentNullException("value");
 			transaction.Outputs.Add(new TxOut(0, Metadata.Script));
 			transaction.Outputs.Add(new TxOut(value, ScriptPubKey));
 		}
@@ -157,7 +161,7 @@ namespace NBitcoin.Stealth
 						if(address == null)
 							throw new ArgumentNullException("address");
 						redeem = CreatePaymentScript(address, metadata.EphemKey, scan);
-						expectedScriptPubKey = redeem.ID.CreateScriptPubKey();
+						expectedScriptPubKey = redeem.Hash.ScriptPubKey;
 						if(expectedScriptPubKey != scriptPubKey)
 							continue;
 					}
