@@ -169,6 +169,7 @@ namespace NBitcoin.RPC
 			webRequest.Credentials = Credentials;
 			webRequest.ContentType = "application/json-rpc";
 			webRequest.Method = "POST";
+			webRequest.PreAuthenticate = true;
 
 			var writer = new StringWriter();
 			request.WriteJSON(writer);
@@ -178,20 +179,20 @@ namespace NBitcoin.RPC
 #if !PORTABLE
 			webRequest.ContentLength = bytes.Length;
 #endif
-			Stream dataStream = await webRequest.GetRequestStreamAsync().ConfigureAwait(false);
+			Stream dataStream = await webRequest.GetRequestStreamAsync(); //.ConfigureAwait(false);
 			dataStream.Write(bytes, 0, bytes.Length);
 			dataStream.Dispose();
 			RPCResponse response = null;
 			try
 			{
-				WebResponse webResponse = await webRequest.GetResponseAsync().ConfigureAwait(false);
+				WebResponse webResponse = await webRequest.GetResponseAsync(); //.ConfigureAwait(false);
 				response = RPCResponse.Load(webResponse.GetResponseStream());
 				if(throwIfRPCError)
 					response.ThrowIfError();
 			}
 			catch(WebException ex)
 			{
-				if (ex.Response != null && ex.Response.ContentType == "application/json-rpc")
+				if (ex.Response != null && ex.Response.ContentType.StartsWith("application/json"))  // handles /json and /json-rpc
 				{
 					response = RPCResponse.Load(ex.Response.GetResponseStream());
 					if (throwIfRPCError)

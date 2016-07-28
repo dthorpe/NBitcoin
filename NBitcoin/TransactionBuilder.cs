@@ -382,6 +382,14 @@ namespace NBitcoin
 				return _CurrentGroup;
 			}
 		}
+
+		public int CurrentGroupIndex { get { return _BuilderGroups.IndexOf(_CurrentGroup); } }
+
+		public void SelectGroup(int index)
+		{
+			_CurrentGroup = _BuilderGroups[index];
+		}
+
 		public TransactionBuilder()
 		{
 			_Rand = new Random();
@@ -678,8 +686,8 @@ namespace NBitcoin
 
 					ctx.Dust = Money.Zero;
 					ctx.CoverOnly = null;
-					var btcSpent = BuildTransaction(ctx, group, builders.Value, coins)
-						.OfType<IColoredCoin>().Select(c => c.Bearer.Amount).Sum();
+					var coloredCoinsSpent = BuildTransaction(ctx, group, builders.Value, coins).OfType<IColoredCoin>();
+					var btcSpent = coloredCoinsSpent.Select(c => c.Bearer.Amount).Sum();
 					ctx.AdditionalFees -= btcSpent;
 				}
 
